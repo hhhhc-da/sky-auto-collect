@@ -18,7 +18,8 @@ except:
 # 屏幕设置
 WIDTH, HEIGHT = 800, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("微信风格聊天软件")
+pygame.display.set_caption("基于机器视觉的自动控制软件")
+pygame.display.set_icon(pygame.image.load("icon2.png"))  # 确保有一个icon.png文件在同一目录下
 
 # 颜色定义
 WHITE = (255, 255, 255)
@@ -73,89 +74,83 @@ class Particle:
         self.original_y = y
         self.x = x                           # 当前位置
         self.y = y
-        self.radius = random.randint(2, 4)
+        self.radius = random.randint(1, 3)
         self.color = (random.randint(150, 255), random.randint(150, 255), random.randint(150, 255))
+        self.speed = random.uniform(1.0, 2.0)  # 固定移动速度
+        self.distance = random.uniform(20, 50) # 旋转半径
         self.angle = random.uniform(0, 2 * math.pi)  # 当前旋转角度
-        self.base_speed = random.uniform(0.02, 0.05)     # 基础旋转速度
-        self.distance = random.uniform(10, 30)       # 旋转半径
-        self.velocity_x = 0                        # x方向速度
-        self.velocity_y = 0                        # y方向速度
-        self.clicked = False                       # 是否被点击
-        self.spring_strength = 0.005               # 弹簧力强度
-        self.damping = 0.9                        # 阻尼系数
-        self.target_x = x                          # 目标位置
-        self.target_y = y
-        self.angle_transition = 1.0                # 角度过渡进度
-        self.post_spring_delay = 0                 # 回弹后延迟
-        self.new_orbit_angle = None                # 新轨道角度
+        self.base_speed = random.uniform(0.002, 0.03) # 基础旋转速度
+        self.clicked = False                   # 是否被点击
+        self.return_progress = 0               # 返回进度 (0-1)
+        self.direction_x = 0                   # 扩散方向
+        self.direction_y = 0
+        self.diffusion_distance = 0            # 扩散距离
+        self.state = "idle"                    # 状态: idle, diffusing, returning
         
     def update(self, mouse_pos, mouse_drag, clicked, click_pos):
         # 处理点击事件
-        if clicked:
+        if clicked and self.state == "idle":
             dx = self.x - click_pos[0]
             dy = self.y - click_pos[1]
-            distance = math.sqrt(dx*dx + dy*dy)
+            distance_to_click = math.sqrt(dx*dx + dy*dy)
             
-            if distance < 150:
-                # 计算扩散力（距离越近，力越大）
-                force = (150 - distance) / 150 * 8
-                self.velocity_x = (dx / distance) * force
-                self.velocity_y = (dy / distance) * force
-                self.clicked = True
-                self.post_spring_delay = 0
-                self.angle_transition = 1.0
-                # 计算目标位置（原始位置的60%）
-                self.target_x = self.original_x * 0.6 + click_pos[0] * 0.4
-                self.target_y = self.original_y * 0.6 + click_pos[1] * 0.4
+            if distance_to_click < 150:
+                # 计算扩散方向和距离
+                self.direction_x = dx / distance_to_click
+                self.direction_y = dy / distance_to_click
+                
+                # 距离越近，扩散距离越大
+                self.diffusion_distance = (150 - distance_to_click) / 150 * 500
+                self.return_progress = 0
+                self.state = "diffusing"
         
         # 更新粒子状态
-        if self.clicked:
-            # 计算到目标位置的距离
-            dx = self.target_x - self.x
-            dy = self.target_y - self.y
-            distance = math.sqrt(dx*dx + dy*dy)
+        if self.state == "diffusing":
+            # 扩散阶段
+            move_distance = min(self.speed, self.diffusion_distance)
+            self.x += self.direction_x * move_distance
+            self.y += self.direction_y * move_distance
+            self.diffusion_distance -= move_distance
             
-            # 添加弹簧力（距离越远，力越大）
-            spring_force_x = dx * self.spring_strength
-            spring_force_y = dy * self.spring_strength
-            
-            # 添加阻尼（减速效果）
-            self.velocity_x = (self.velocity_x + spring_force_x) * self.damping
-            self.velocity_y = (self.velocity_y + spring_force_y) * self.damping
-            
-            # 更新位置
-            self.x += self.velocity_x
-            self.y += self.velocity_y
-            
-            # 检查是否接近目标位置
-            if distance < 1 and abs(self.velocity_x) < 0.1 and abs(self.velocity_y) < 0.1:
-                self.post_spring_delay += 1
+            if self.diffusion_distance <= 0:
+                self.state = "returning"
+                # 计算返回方向
+                dx_return = self.original_x - self.x
+                dy_return = self.original_y - self.y
+                distance_to_origin = math.sqrt(dx_return*dx_return + dy_return*dy_return)
+                self.direction_x = dx_return / distance_to_origin if distance_to_origin > 0 else 0
+                self.direction_y = dy_return / distance_to_origin if distance_to_origin > 0 else 0
+                # 距离越远，返回时间越长
+                self.return_distance = distance_to_origin
+                self.return_progress = 0
                 
-                # 延迟一段时间后开始新的轨道运动
-                if self.post_spring_delay > 30:
-                    if self.new_orbit_angle is None:
-                        # 随机选择一个新角度
-                        self.new_orbit_angle = random.uniform(0, 2 * math.pi)
-                        self.angle_transition = 0.0
-                    elif self.angle_transition < 1.0:
-                        # 平滑过渡到新角度
-                        self.angle_transition += 0.03
-                        self.angle = self.angle * (1 - self.angle_transition) + self.new_orbit_angle * self.angle_transition
-                    else:
-                        # 角度过渡完成，翻转180度并重新定位
-                        self.angle = (self.angle + math.pi) % (2 * math.pi)
-                        self.target_x = self.x + math.cos(self.angle) * 15
-                        self.target_y = self.y + math.sin(self.angle) * 15
-                        self.new_orbit_angle = None
-                        self.clicked = False
+        elif self.state == "returning":
+            # 返回阶段
+            move_distance = min(self.speed, self.return_distance)
+            self.x += self.direction_x * move_distance
+            self.y += self.direction_y * move_distance
+            self.return_distance -= move_distance
+            self.return_progress += move_distance / (self.return_distance + move_distance)
+            
+            if self.return_distance <= 0:
+                self.x = self.original_x
+                self.y = self.original_y
+                self.state = "idle"
+                self.angle = random.uniform(0, 2 * math.pi)  # 重置角度
         else:
-            # 正常旋转（围绕新的中心）
+            # 正常旋转
             self.angle += self.base_speed + (mouse_drag * 0.03)
-            self.x = self.target_x + math.cos(self.angle) * self.distance
-            self.y = self.target_y + math.sin(self.angle) * self.distance
+            self.x = self.original_x + math.cos(self.angle) * self.distance
+            self.y = self.original_y + math.sin(self.angle) * self.distance
     
     def draw(self, surface):
+        # 绘制粒子
         pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
+        
+        # 可选：绘制返回进度指示器
+        if self.state == "returning":
+            progress_radius = max(1, self.radius * (1 - self.return_progress))
+            pygame.draw.circle(surface, (255, 255, 255), (int(self.x), int(self.y)), int(progress_radius), 1)
 
 # 聊天界面类
 class ChatInterface:
@@ -173,7 +168,7 @@ class ChatInterface:
         self.clicked = False
         self.click_pos = (0, 0)
         self.num_particles = random.randint(50, 80)         # 粒子数量
-        self.contact_distance = random.uniform(100, 130)    # 粒子链接距离
+        self.contact_distance = random.uniform(50, 100)    # 粒子链接距离
         
         # 初始化粒子
         self.initialize_particles()

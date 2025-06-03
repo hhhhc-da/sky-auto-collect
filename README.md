@@ -4,6 +4,14 @@
 
 ### 功能详情
 
+软件当前的 UI 是这样的
+
+![image](./images/ui.png)
+
+UI 正在开发中...
+
+![image](./images/new_ui.png)
+
 1. 自动送心火
 
 （功能仍在开发中）

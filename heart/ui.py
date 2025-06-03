@@ -5,7 +5,7 @@ os.environ['OMP_NUM_THREADS'] = '1'
 import sys
 import time
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, 
-                            QVBoxLayout, QWidget, QHBoxLayout)
+                            QVBoxLayout, QWidget, QHBoxLayout, QSpacerItem, QSizePolicy)
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, QRect, QPoint
 from PySide6.QtGui import (QColor, QPalette, QRegion, QPainterPath, 
                           QCursor, QPainter, QPen)
@@ -103,22 +103,6 @@ class MainProgramThread(QThread):
                     center_point = np.mean(close_points, axis=0)
                     reliable_points.append(center_point)
             
-            # # 统计五次检测到的目标
-            # max_num_tfa_targets = np.argmax([len(target) for target in tfa_targets], axis=0)
-            # # 组合所有检测到的目标
-            # all_target = np.confccatenate(tfa_targets, axis=0)
-            
-            # ita = min(frame.shape)*0.02
-            # unfit_sample = tfa_targets[max_num_tfa_targets]
-            # for points in unfit_sample:
-            #     # 形状为 (1, 2), 减去 (total, 2) 之后需要有至少四个重复的数, 否则我们不认为有效
-            #     diff = np.sum(np.array(points).reshape(1, 2) - all_target, axis=1)
-            #     selector = np.where(np.abs(diff) < ita, 1, 0)
-            #     if np.sum(selector) >= 4:
-            #         # 说明这个点是有效的
-            #         medium_p = np.sum(all_target * selector)/np.sum(selector)
-            #         reliable_points.append(medium_p)
-            
             # 逐个处理检测到的目标
             for i, (x, y) in enumerate(reliable_points):
                 # 一套赠送心火流程
@@ -180,13 +164,24 @@ class TransparentWindow(QMainWindow):
         top_layout = QHBoxLayout()
         
         # 拖动区域
-        self.drag_area = QWidget()
-        self.drag_area.setMinimumHeight(30)
-        self.drag_area.setStyleSheet("background-color: rgba(0, 0, 0, 153);"  # 黑色，60%透明度
-                                    "border-radius: 10px;")  # 拖动区域圆角
-        self.drag_area.mousePressEvent = self.start_drag
-        self.drag_area.mouseMoveEvent = self.drag_move
-        self.drag_area.mouseReleaseEvent = self.stop_drag
+        # self.drag_area = QWidget()
+        # self.drag_area.setMinimumHeight(30)
+        # self.drag_area.setStyleSheet("background-color: rgba(0, 0, 0, 153);"  # 黑色，60%透明度
+        #                             "border-radius: 10px;")  # 拖动区域圆角
+        # self.drag_area.mousePressEvent = self.start_drag
+        # self.drag_area.mouseMoveEvent = self.drag_move
+        # self.drag_area.mouseReleaseEvent = self.stop_drag
+        
+        self.horizontal_spacer = QSpacerItem(
+            0,                      # 水平最小宽度（可设为0）
+            30,                     # 垂直最小高度
+            QSizePolicy.Expanding,  # 水平方向可扩展
+            QSizePolicy.Minimum     # 垂直方向固定
+        )
+        
+        self.mousePressEvent = self.start_drag
+        self.mouseMoveEvent = self.drag_move
+        self.mouseReleaseEvent = self.stop_drag
         
         # 圆角矩形退出按钮
         self.exit_button = QPushButton("×")
@@ -205,7 +200,7 @@ class TransparentWindow(QMainWindow):
         """)
         self.exit_button.clicked.connect(self.quit_application)
         
-        top_layout.addWidget(self.drag_area, 1)  # 占据剩余空间
+        top_layout.addSpacerItem(self.horizontal_spacer)  # 占据剩余空间
         top_layout.addWidget(self.exit_button)
         
         main_layout.addLayout(top_layout)
