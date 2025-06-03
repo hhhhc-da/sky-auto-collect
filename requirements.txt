@@ -1,0 +1,16 @@
+torch
+torchvision
+numpy
+pandas
+matplotlib
+seaborn
+ultralytics
+wandb
+scikit-learn
+tensorflow
+onnx
+onnxslim
+onnxruntime
+onnx2tf
+tf_keras
+pyautogui

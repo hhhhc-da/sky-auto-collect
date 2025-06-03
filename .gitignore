@@ -172,3 +172,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+wandb/
+*.pt
+dataset/
+data/diff/
+*.mp4
+data/source/frames/
+
+.vscode/
