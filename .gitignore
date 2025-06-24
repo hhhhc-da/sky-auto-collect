@@ -177,6 +177,8 @@ wandb/
 *.pt
 dataset/
 data/diff/
+heart/source/datasets/
+heart/source/screenshot/
 *.mp4
 data/source/frames/
 
