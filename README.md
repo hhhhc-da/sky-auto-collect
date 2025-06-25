@@ -24,7 +24,11 @@ UI 正在开发中...
 
 想要开发：使用目标检测算法确定物体位置并控制任务游走
 
-使用的算法为 YOLOv11，因为 YOLOv12 引入了注意力机制，但是我是 RTX 3050 LapTop 所以不支持 flash_attn 运行的老慢了，而且我打算使用 yolo11n.pt 完全放弃精度，因为这种实时性比较高的任务最好还是考虑能不能及时处理，所以我们使用最小模型，同时使用 CUDA 加速
+使用的算法为 YOLOv11，因为 YOLOv12 引入了注意力机制
+
+RTX 3050 LapTop 所以不支持 flash_attn 所以运行速度较慢, 使用 CUDA 加速
+
+之后打算使用深度强化学习进行学习, 所以我只能说路漫漫...
 
 ```
 conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.1 -c pytorch -c nvidia
