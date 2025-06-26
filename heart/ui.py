@@ -30,6 +30,8 @@ class MainProgramThread(QThread):
         screenshot = np.array(pyautogui.screenshot())
         self.height, self.width = int(screenshot.shape[0]), int(screenshot.shape[1])
         print("当前屏幕分辨率: {}x{}".format(self.width, self.height))
+        
+        self.page = 0
     
     def run(self):
         # 首先我们先把星盘定位到添加好友
@@ -75,6 +77,10 @@ class MainProgramThread(QThread):
                 time.sleep(abs(random.gauss(0.6, 1)))
                 pydirectinput.keyUp('c')
                 time.sleep(3) 
+                
+                # 页数加一表示现在在那页否则会死循环
+                self.page += 1
+                
                 pydirectinput.moveTo(0, 0)
                 time.sleep(0.5)
 
@@ -218,7 +224,7 @@ class MainProgramThread(QThread):
                         pydirectinput.moveTo(int(x*self.width//1920), int(y*self.height//1080))  # 移动鼠标到目标中心
                         time.sleep(0.1)
                         pydirectinput.click()  # 点击目标，不出意外的话我们应该还在星盘页
-                        time.sleep(0.6)
+                        time.sleep(1)
                         
                         # 这里有一个分歧, 如果检测出来没有文字了那就是进去了, 因为星屑识别不准, 但是能抑制鼠标
                         screenshot_2 = pyautogui.screenshot()
@@ -231,7 +237,7 @@ class MainProgramThread(QThread):
                             pydirectinput.keyDown('esc') # 退回到星盘
                             time.sleep(0.1)
                             pydirectinput.keyUp('esc')
-                            time.sleep(0.6)
+                            time.sleep(1)
                         
                         screenshot = pyautogui.screenshot()
                         frame = np.array(screenshot)
@@ -243,6 +249,42 @@ class MainProgramThread(QThread):
                             time.sleep(0.1)
                             pydirectinput.keyUp('g')
                             time.sleep(2.5)
+                            
+                            timeout = 50
+                            while timeout > 0:
+                                screenshot = pyautogui.screenshot()
+                                frame = np.array(screenshot)
+                                self.detector.update_image(frame)  # 更新检测器的图像数据
+                                
+                                temp_pdata = None
+                                timeout_detector = 10  # 每次检测最多尝试10次
+                                while timeout_detector > 0:
+                                    try:
+                                        temp_pdata, _ = self.detector.multi_detector(plot=False)
+                                        break
+                                    except Exception as e:
+                                        print(f"检测失败: {e}")
+                                        timeout_detector -= 1
+                                    
+                                if temp_pdata['code'] != 1:
+                                    timeout -= 1
+                                    
+                                    # 不停向左检测图片
+                                    pydirectinput.keyDown('z')
+                                    time.sleep(abs(random.gauss(0.6, 1)))
+                                    pydirectinput.keyUp('z')
+                                    time.sleep(1)
+                                    continue
+                                else:
+                                    break
+                                            
+                            # 恢复到当前页
+                            for _ in range(self.page):
+                                pydirectinput.keyDown('c')
+                                time.sleep(abs(random.gauss(0.6, 1)))
+                                pydirectinput.keyUp('c')
+                                time.sleep(0.3)
+                            time.sleep(1)  # 等待页面加载完成
                         
     ################################################### 接收心火 ###################################################
                 # 接下来开始送心火，处理 pre 的点
@@ -274,7 +316,7 @@ class MainProgramThread(QThread):
                     pydirectinput.keyDown('esc')
                     time.sleep(0.1)
                     pydirectinput.keyUp('esc')
-                    time.sleep(0.5)
+                    time.sleep(1.2)
                     
                     # 检测是否还在星盘页
                     pydirectinput.moveTo(0, 0)  # 移动鼠标到屏幕左上角
@@ -290,6 +332,43 @@ class MainProgramThread(QThread):
                         time.sleep(0.1)
                         pydirectinput.keyUp('g')
                         time.sleep(2)
+                        
+                        timeout = 50
+                        while timeout > 0:
+                            screenshot = pyautogui.screenshot()
+                            frame = np.array(screenshot)
+                            self.detector.update_image(frame)  # 更新检测器的图像数据
+                            
+                            temp_pdata = None
+                            timeout_detector = 10  # 每次检测最多尝试10次
+                            while timeout_detector > 0:
+                                try:
+                                    temp_pdata, _ = self.detector.multi_detector(plot=False)
+                                    break
+                                except Exception as e:
+                                    print(f"检测失败: {e}")
+                                    timeout_detector -= 1
+                                
+                            if temp_pdata['code'] != 1:
+                                timeout -= 1
+                                
+                                # 不停向左检测图片
+                                pydirectinput.keyDown('z')
+                                time.sleep(abs(random.gauss(0.6, 1)))
+                                pydirectinput.keyUp('z')
+                                time.sleep(1)
+                                continue
+                            else:
+                                break
+                                        
+                        # 恢复到当前页
+                        for _ in range(self.page):
+                            pydirectinput.keyDown('c')
+                            time.sleep(abs(random.gauss(0.6, 1)))
+                            pydirectinput.keyUp('c')
+                            time.sleep(0.3)
+                        time.sleep(1)  # 等待页面加载完成
+                        
             except Exception as e:
                 # 如果是 Over 异常，直接退出循环
                 if str(e) == "Over":
