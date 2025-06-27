@@ -17,7 +17,7 @@ pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https
 之后安装 requirements.txt 安装好依赖，之后就可以直接运行 Python 程序
 
 ```
-pip install requirements.txt
+pip install -r requirements.txt
 ```
 
 目前版本送心火使用的是 heart\ui.py 我们直接打开它就行，没有其他要求，屏幕分辨率最好是 1920x1080 的
