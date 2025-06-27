@@ -16,3 +16,6 @@ scipy
 ddddocr
 pygame
 helium
+selenium
+fake-useragent
+openpyxl
