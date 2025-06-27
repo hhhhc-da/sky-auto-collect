@@ -1,6 +1,3 @@
 episode: 3
-delay: 100
+delay: 5
 file: "E:\\pandownload1\\ML\\links.xlsx"
-address:
-  city: "New York"
-  zip: 10001

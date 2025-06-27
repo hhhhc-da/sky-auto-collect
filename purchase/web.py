@@ -8,6 +8,13 @@ import pandas as pd
 import os
 import yaml
 import argparse
+from tqdm import tqdm
+
+def opt_parser():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description="Web Crawler for Heart Collection")
+    parser.add_argument('--yaml', type=str, default="config.yaml", help='需要读取的 yaml 文件位置')
+    return parser.parse_args()
 
 class WebCrawler:
     def __init__(self, sigma:float=0.07):
@@ -66,12 +73,26 @@ class WebCrawler:
 
 if __name__ == "__main__":
     # 取心地址, Excel 中要有一个表头为 url 在 (1, A) 位置
-    data = yaml.safe_load("")
-    data = pd.read_excel(os.path.join("source", "links.xlsx"), sheet_name="Sheet1", names=["url"])
+    opt = opt_parser()
+    
+    data = None
+    with open(opt.yaml, 'r', encoding='utf-8') as file:
+        data = yaml.safe_load(file)
+        file.close()
+    
+    pf = pd.read_excel(data['file'], sheet_name="Sheet1", names=["url"])
     crawler = WebCrawler()
     
-    for index, row in data.iterrows():
-        target_url = row['url']
-        crawler.crawl_main(target_url)
+    for epoch in range(data['episode']):
+        print(f"第 {epoch + 1} 轮取心")
+        for index, row in pf.iterrows():
+            target_url = row['url']
+            crawler.crawl_main(target_url)
+            
+        if epoch != data['episode'] - 1:
+            with tqdm(total=data['delay'], desc=f"Time", unit='s') as pbar:
+                for i in range(data['delay']):
+                    time.sleep(1)
+                    pbar.update(1)
         
     print("全部链接已经处理完毕")
