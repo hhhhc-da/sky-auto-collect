@@ -19,3 +19,4 @@ helium
 selenium
 fake-useragent
 openpyxl
+pyyaml

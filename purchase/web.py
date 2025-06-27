@@ -1,3 +1,4 @@
+# coding=utf-8
 import helium
 from selenium.webdriver.chrome.options import Options
 from fake_useragent import UserAgent
@@ -5,6 +6,8 @@ import random
 import time
 import pandas as pd
 import os
+import yaml
+import argparse
 
 class WebCrawler:
     def __init__(self, sigma:float=0.07):
@@ -63,6 +66,7 @@ class WebCrawler:
 
 if __name__ == "__main__":
     # 取心地址, Excel 中要有一个表头为 url 在 (1, A) 位置
+    data = yaml.safe_load("")
     data = pd.read_excel(os.path.join("source", "links.xlsx"), sheet_name="Sheet1", names=["url"])
     crawler = WebCrawler()
     

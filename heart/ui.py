@@ -1,3 +1,4 @@
+# coding=utf-8
 import os
 os.environ["QT_SCALE_FACTOR"] = "1.0"
 os.environ['OMP_NUM_THREADS'] = '1'
