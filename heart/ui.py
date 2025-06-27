@@ -291,7 +291,7 @@ class MainProgramThread(QThread):
                     pydirectinput.keyDown('space') # 点击目标，没送心火的话进入到了送心的人的星盘页
                     self.gauss_sleep(0.1)
                     pydirectinput.keyUp('space')
-                    self.gauss_sleep(0.8)
+                    self.gauss_sleep(1.5)
                     break
                 else:
                     print("检测到我们不在星盘页需要重新定位") # 由于是自动程序控制所以不用担心在这里卡死
@@ -312,7 +312,7 @@ class MainProgramThread(QThread):
                 pydirectinput.keyDown('space') # 这都进不去鉴定为识别错了
                 self.gauss_sleep(0.1)
                 pydirectinput.keyUp('space')
-                self.gauss_sleep(0.6)
+                self.gauss_sleep(1.5)
                 
                 
             if not self.check_text(): 

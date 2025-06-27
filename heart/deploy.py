@@ -223,6 +223,14 @@ class NanokaDetector():
         用于将数据切分成我们想要的形式之后进行分类任务就可以了
         '''
         targets, anti_targets, plot_image = self.threhold_detector(plot=False, show=False)
+        if len(anti_targets) == 0:
+            # 没有检测到任何大目标点
+            post = []
+            pre = [i for i in targets.tolist()]
+            pre_scaler, post_scaler = 5, 2
+            pre_sub_gray = [self.gray[int(y-max(w,h)*pre_scaler):int(y+max(w, h)*pre_scaler), int(x-max(w, h)*pre_scaler):int(x+max(w, h)*pre_scaler)] for x, y, w, h in pre]
+            post_sub_gray = []
+            return pre_sub_gray, post_sub_gray, pre, post
 
         diff = np.expand_dims(targets[:,:2], axis=1) - np.expand_dims(anti_targets[:,:2], axis=0)
         distance = np.sqrt(np.sum(diff*diff, axis=2))
