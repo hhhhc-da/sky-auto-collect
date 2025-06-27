@@ -22,6 +22,28 @@ pip install -r requirements.txt
 
 目前版本送心火使用的是 heart\ui.py 我们直接打开它就行，没有其他要求，屏幕分辨率最好是 1920x1080 的
 
+__一定要注意，由于这类自动化程序需要很高的执行权限，所以务必在使用时保持管理员权限__
+
+可以类似于我的启动器（heart\A启动器.bat）编写启动程序，先请求管理员权限后再执行就不会有问题了
+
+```bat
+@echo off
+
+net session >nul 2>&1
+
+if %errorLevel% neq 0 (
+    powershell -Command "Start-Process '%~dpnx0' -Verb RunAs"
+    exit /b
+)
+
+
+cd /d "%~dp0"
+
+conda activate data && python ui.py
+```
+
+最后的那个 conda activate data && python ui.py 换成自己的启动语句就可以了
+
 ### __功能详情__
 
 软件当前的 UI 是这样的
@@ -42,8 +64,6 @@ UI 仍然在开发中...但作者前端力很弱...
 功能仍在开发中，请耐心等待
 
 作者不定时会更新一下，剩下的时间都在鸽hhhh
-
-但是吧我发现自动送心火在我的 vscode 下正常运行但是在 cmd 或 powershell 下运行不动，很是奇怪
 
 ### __自动收发心火__
 

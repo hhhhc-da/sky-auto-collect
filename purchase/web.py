@@ -5,7 +5,6 @@ from fake_useragent import UserAgent
 import random
 import time
 import pandas as pd
-import os
 import yaml
 import argparse
 from tqdm import tqdm
