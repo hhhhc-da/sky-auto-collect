@@ -20,11 +20,8 @@ pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https
 pip install requirements.txt
 ```
 
-目前版本送心火使用的是 ui.py 我们直接打开它就行，没有其他要求，屏幕分辨率最好是 1920x1080 的
+目前版本送心火使用的是 heart\ui.py 我们直接打开它就行，没有其他要求，屏幕分辨率最好是 1920x1080 的
 
-```
-python ui.py
-```
 
 
 ### __功能详情__
@@ -35,10 +32,14 @@ python ui.py
 
 UI 正在开发中...
 
-|功能|
-|-----|
-|自动送心火|
-|主动领心|
+|功能|目录|
+|-----|-----|
+|README静态文件|images|
+|获取图像模态数据|data|
+|自动送心火|heart|
+|自动送心火调试台|heart-valid|
+|主动领心|purchase|
+|YOLOv11目标检测|yolov11|
 
 
 __功能仍在开发中，请耐心等待__
@@ -86,6 +87,10 @@ file: "E:\\pandownload1\\ML\\links.xlsx" # 这个是我们取心链接的 Excel 
 ```
 
 之后正常运行就可以了
+
+```
+python purchase\web.py --yaml purchase\config.py
+```
 
 ![image](./images/purchase_output.png)
 
