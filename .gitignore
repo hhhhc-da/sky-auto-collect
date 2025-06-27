@@ -175,18 +175,17 @@ cython_debug/
 
 wandb/
 *.pt
+*pth
 detector/dataset/candle_only/
 detector/dataset/sky/
 data/diff/
 data/source/frames/
 
-heart/runs/predict/*.png
-heart/source/datasets/nanoka_v1/0/
-heart/source/datasets/nanoka_v1/1/
-heart/source/datasets/nanoka_v1/2/
-heart/source/datasets/nanoka_v1/3/
-heart/source/screenshot/*.png
-heart/models/*.pth
+heart-valid/source/datasets/nanoka_v1/0/
+heart-valid/source/datasets/nanoka_v1/1/
+heart-valid/source/datasets/nanoka_v1/2/
+heart-valid/source/datasets/nanoka_v1/3/
+heart-valid/source/screenshot/*.png
 *.mp4
 
 .vscode/

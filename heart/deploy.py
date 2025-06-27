@@ -3,26 +3,13 @@ os.environ['OMP_NUM_THREADS'] = '1'
 
 import sys
 import re
-import json
 import cv2
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
-import sklearn
-from sklearn.metrics import classification_report, confusion_matrix
-from scipy import signal
 import ddddocr
-import torch
-from torchvision.models import resnet18, ResNet18_Weights
 from copy import copy
-import pyautogui
-from datetime import datetime
-import time
 from tqdm import tqdm
-from torch import nn
-import torch.nn.functional as F
-import math
 from scipy.ndimage import median_filter
 
 # 全局配置
@@ -193,25 +180,17 @@ class NanokaDetector():
             height, width = self.gray.shape
             border_x = int(width * border_ratio)
             border_y = int(height * border_ratio)
-            
-            text_area = self.gray[height-border_y:, :border_x]    
+            text_area = self.gray[height-border_y:, :border_x]
             _, encoded_img = cv2.imencode('.png', text_area)
             img_bytes = encoded_img.tobytes()
-        
-            # 只能检测编码字节流
             result = self.ocr.classification(img_bytes)
         else:
             height, width = gray.shape
-            
             border_x = int(width * border_ratio)
             border_y = int(height * border_ratio)
-            
-            text_area_2 = gray[height-border_y:, :border_x]    
-            
+            text_area_2 = gray[height-border_y:, :border_x] 
             _, encoded_img_2 = cv2.imencode('.png', text_area_2)
             img_bytes = encoded_img_2.tobytes()
-        
-            # 只能检测编码字节流
             result = self.ocr.classification(img_bytes)
         return result
 
@@ -348,15 +327,11 @@ class NanokaDetector():
             falling_edges = np.where(diff == -1)[0] + 1
         
             if len(rising_edges) != len(falling_edges):
-                # fig, axes = plt.subplots(2, 5, figsize=(12, 4))
-                # for i, ax in enumerate(axes.flatten()):
-                #     if i < len(analyze_list):
-                #         ax.plot(analyze_list[i])
-                #         ax.set_title('Analyze Plot Figure{}'.format(i))
-                #         plt.ylim(0, 1)
-                # plt.tight_layout()
-                # plt.show()
-                raise RuntimeError("上升沿与下降沿不匹配")
+                if len(rising_edges) > len(falling_edges):
+                    rising_edges = rising_edges[len(rising_edges)-len(falling_edges):]
+                else:
+                    falling_edges = falling_edges[len(rising_edges)-len(falling_edges):]
+
             if len(rising_edges) >= 3: # 不应该有这么多有效边沿, 除非是大文字
                 octagram_detect_result.append(0) # cls 0 就是背景色
                 radius_list.append([False, -1, -2])
@@ -421,7 +396,7 @@ class NanokaDetector():
             pre_sub_gray, post_sub_gray, pre_points, post_points =  self.image_spiltor()
 
             # 检测出每个 post 的类型用于确定星屑, 为 0 的就是需要收心火的, 为 1 的就是不需要收心火的
-            labels = self.analyze_star(post_sub_gray, bound=40)
+            labels = self.analyze_star(post_sub_gray, bound=25)
 
             pre_octagram_detect_result, pre_radius_list = self.analyze_octagram(pre_sub_gray)
             post_octagram_detect_result, post_radius_list = self.analyze_octagram(post_sub_gray)
