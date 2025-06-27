@@ -189,3 +189,4 @@ heart-valid/source/screenshot/*.png
 *.mp4
 
 .vscode/
+pygame/
