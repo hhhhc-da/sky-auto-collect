@@ -28,7 +28,7 @@ pip install requirements.txt
 
 ![image](./images/ui.png)
 
-UI 仍然在开发中...但我是做人工智能的...不是很擅长...
+UI 仍然在开发中...但作者前端力很弱...
 
 |功能|目录|
 |-----|-----|
