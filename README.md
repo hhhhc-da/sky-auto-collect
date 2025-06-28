@@ -56,10 +56,10 @@ UI 仍然在开发中...但作者前端力很弱...
 |-----|-----|
 |README静态文件|images|
 |获取图像模态数据|data|
-|自动送心火|heart|
-|自动送心火调试台|heart-valid|
+|心火图形测试|heart|
 |主动领心|purchase|
 |YOLOv11目标检测|yolov11|
+|主程序|main|
 
 功能仍在开发中，请耐心等待
 
@@ -93,6 +93,18 @@ HSV 色相检测爱心，之后用四角星检测是否需要送心火，八角�
 
 可以取这种形式的心，同时该类网站一般没有反爬措施，所以请注意爬取频率
 
+按钮识别使用正则表达式, 有一定的通用性
+
+```python
+# 识别确定、取爱心、复制编码、间隔领取按钮
+[r'确[\x00-\x7F]{0,5}定', r'取.*?爱心', r'复[\x00-\x7F]{0,2}制[\x00-\x7F]{0,2}编[\x00-\x7F]{0,2}码', r'请[\x00-\x7F]{0,8}秒后领取']
+
+# 识别好友码
+code = pyperclip.paste() # 举例 APS5-S0EQ-DH2B
+if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
+    print("识别到好友码:", code)
+```
+
 因为今天的链接都领完了所以这次没办法再领了
 
 我们首先需要调整 yaml 文件中的配置
@@ -103,11 +115,7 @@ delay: 5 # 这个是个轮次之间需要等待的时间数
 file: "E:\\pandownload1\\ML\\links.xlsx" # 这个是我们取心链接的 Excel 表的绝对地址
 ```
 
-之后正常运行就可以了
-
-```
-python purchase\web.py --yaml purchase\config.py
-```
+之后正常运行就可以了，可以在后面确定参数 --yaml config.yaml 指定需要读取的 yaml 文件
 
 ![image](./images/purchase_output.png)
 

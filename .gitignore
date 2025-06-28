@@ -181,11 +181,6 @@ yolov11/dataset/sky/
 data/diff/
 data/source/frames/
 
-heart-valid/source/datasets/nanoka_v1/0/
-heart-valid/source/datasets/nanoka_v1/1/
-heart-valid/source/datasets/nanoka_v1/2/
-heart-valid/source/datasets/nanoka_v1/3/
-heart-valid/source/screenshot/*.png
 *.mp4
 
 .vscode/

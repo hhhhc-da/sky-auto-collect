@@ -8,6 +8,8 @@ import pandas as pd
 import yaml
 import argparse
 from tqdm import tqdm
+import pyperclip
+import re
 
 def opt_parser():
     """解析命令行参数"""
@@ -20,13 +22,42 @@ class WebCrawler:
         """初始化爬虫，设置高斯分布的标准差"""
         self.sigma = sigma
         self.browser_started = False  # 跟踪浏览器是否成功启动
+        self.codes = []
         
     def gauss_sleep(self, seconds:float=0.6, min_seconds:float=0.1) -> None:
         """暂停指定的秒数"""
         time.sleep(max(min_seconds, random.gauss(seconds, self.sigma)))
+        
+    def re_keyword_detector(self, texts):
+        """
+        ASCII字符清洗检测子串, 最大程度保证我们能点到正确的内容
+        """
+        wait_time = 0
+        patterns = [r'确[\x00-\x7F]{0,5}定', r'取.*?爱心', r'复[\x00-\x7F]{0,2}制[\x00-\x7F]{0,2}编[\x00-\x7F]{0,2}码', r'请[\x00-\x7F]{0,8}秒后领取']
+        dataframes = {
+            '确定': [],
+            '取爱心': [],
+            '复制':[],
+            '等待': [],
+            '文本': []
+        }
+    
+        for text in texts:
+            matchs = list([bool(re.search(pattern, text)) for pattern in patterns])
+            dataframes['确定'].append(matchs[0] == True)
+            dataframes['取爱心'].append(matchs[1] == True)
+            dataframes['复制'].append(matchs[2] == True)
+            dataframes['等待'].append(matchs[3] == True)
+            
+            if matchs[3]:
+                wait_time = int(re.findall(r'\d+', text)[0]) if re.findall(r'\d+', text) else 0
+            
+            dataframes['文本'].append(text)
+            
+        return pd.DataFrame(dataframes), wait_time
 
     def crawl_main(self, url="https://www.baidu.com/"):
-        """爬虫主函数, 不要太频繁地请求网页就可以"""
+        """单次请求爬虫主函数, 不要太频繁地请求网页就可以"""
         try:
             # 智能生成 User-Agent（基于真实统计数据）
             ua = UserAgent()
@@ -40,26 +71,69 @@ class WebCrawler:
             for option in user_options:
                 chrome_options.add_argument(option)
             
-            helium.start_chrome(url, headless=False, options=chrome_options)
+            helium.start_chrome(url, headless=True, options=chrome_options)
             self.browser_started = True
             print("正在加载页面: {}".format(url))
             self.gauss_sleep(8) # 使用随机数用于逃过验证
             
-            heart_button = helium.Button("点击取一颗爱心")
+            texts = []
+            buttons = helium.find_all(helium.S("button"))
+            for index, button in enumerate(buttons):
+                texts.append(button.web_element.text)
+            
+            button_text = None
+            pf, wait_time = self.re_keyword_detector(texts)
+            if wait_time > 0:
+                print(f"识别到等待时间: {wait_time} 秒")
+                with tqdm(total=wait_time+5, desc=f"等待", unit='s') as pbar:
+                    for _ in range(wait_time+5):
+                        time.sleep(1)
+                        pbar.update(1)
+                # 我们只做一次校验, 第二次就不做了
+                pf, _ = self.re_keyword_detector(texts)
+                
+            button_text = pf[pf['取爱心']]['文本'].values[0]
+            print(f"找到取心按钮: {button_text}")
+            
+            heart_button = helium.Button(button_text)
             helium.wait_until(heart_button.exists, timeout_secs=10)
             helium.click(heart_button)
             
             self.gauss_sleep(2)
-            if helium.Text("今日取心已到上限了,请明天再来哦！").exists():
+            texts = []
+            buttons = helium.find_all(helium.S("button"))
+            for index, button in enumerate(buttons):
+                texts.append(button.web_element.text)
+            pf, _ = self.re_keyword_detector(texts)
+                
+            # 双重验证, 如果出现这个或者没有出现确定那么我们就这样处理
+            if helium.Text("今日取心已到上限了,请明天再来哦！").exists() or len(pf[pf['确定']]['文本'].values) == 0:
                 raise Exception("本链接已经达到上限")
             
-            code_button = helium.Button("复制编码")
+            ok_text = pf[pf['确定']]['文本'].values[0]
+            print(f"找到确定按钮: {ok_text}")
+            ok_button = helium.Button(ok_text)
+            helium.wait_until(ok_button.exists, timeout_secs=10)
+            helium.click(ok_button)
+            
+            texts = []
+            buttons = helium.find_all(helium.S("button"))
+            for index, button in enumerate(buttons):
+                texts.append(button.web_element.text)
+            pf, _ = self.re_keyword_detector(texts)
+            code_text = pf[pf['复制']]['文本'].values[0]
+            print(f"找到复制按钮: {code_text}")
+            
+            code_button = helium.Button(code_text)
             helium.wait_until(code_button.exists, timeout_secs=10)
             helium.click(code_button)
+            self.gauss_sleep(1)
             
-            with open("code.txt", "w+", encoding='utf-8') as f:
-                f.write(helium.get_clipboard())
-                f.close()
+            # 将剪切板内容复制出来
+            code = pyperclip.paste() # 举例 APS5-S0EQ-DH2B
+            if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
+                print("识别到好友码:", code)
+                self.codes.append(code)
             
             self.gauss_sleep(5)
             
@@ -69,6 +143,15 @@ class WebCrawler:
             if self.browser_started:
                 helium.kill_browser()
                 self.browser_started = False
+                
+    def receive_hearts(self):
+        '''用于处理接收到的好友码, 由于我们不使用多线程所以能保证数组访问的正确性'''
+        if not self.codes:
+            print("没有接收到任何好友码")
+            return
+        
+        for i in enumerate(self.codes):
+            pass
 
 if __name__ == "__main__":
     # 取心地址, Excel 中要有一个表头为 url 在 (1, A) 位置
