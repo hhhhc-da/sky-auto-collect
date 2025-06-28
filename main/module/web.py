@@ -57,7 +57,6 @@ class WebCrawler:
             
             code = 'APS5-S0EQ-DH2B' # 举例 APS5-S0EQ-DH2B
             if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
-                print("识别到好友码:", code)
                 self.code = code
             return
             
@@ -96,7 +95,6 @@ class WebCrawler:
                 pf, _ = self.re_keyword_detector(texts)
                 
             button_text = pf[pf['取爱心']]['文本'].values[0]
-            print(f"找到取心按钮: {button_text}")
             
             heart_button = helium.Button(button_text)
             helium.wait_until(heart_button.exists, timeout_secs=10)
@@ -114,7 +112,6 @@ class WebCrawler:
                 raise Exception("本链接已经达到上限")
             
             ok_text = pf[pf['确定']]['文本'].values[0]
-            print(f"找到确定按钮: {ok_text}")
             ok_button = helium.Button(ok_text)
             helium.wait_until(ok_button.exists, timeout_secs=10)
             helium.click(ok_button)
@@ -125,7 +122,6 @@ class WebCrawler:
                 texts.append(button.web_element.text)
             pf, _ = self.re_keyword_detector(texts)
             code_text = pf[pf['复制']]['文本'].values[0]
-            print(f"找到复制按钮: {code_text}")
             
             code_button = helium.Button(code_text)
             helium.wait_until(code_button.exists, timeout_secs=10)
@@ -135,7 +131,6 @@ class WebCrawler:
             # 将剪切板内容复制出来
             code = pyperclip.paste() # 举例 APS5-S0EQ-DH2B
             if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
-                print("识别到好友码:", code)
                 self.code = code
             
             self.gauss_sleep(5)
