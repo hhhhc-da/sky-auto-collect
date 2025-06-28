@@ -10,4 +10,4 @@ if %errorLevel% neq 0 (
 
 cd /d "%~dp0"
 
-conda activate data && python ui.py
+conda activate data && python main.py

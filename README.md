@@ -50,7 +50,13 @@ conda activate data && python ui.py
 
 ![image](./images/ui.png)
 
-UI 仍然在开发中...但作者前端力很弱...
+UI 仍然在开发中...
+
+每次使用一个功能时，菜单会收起来，如果你想中断那只能打开任务管理器搜索 python 之后强制中断
+
+好消息是因为屏幕只有一个进程只有一个所以我们不用考虑多线程导致的资源竞争，使用 QThread 也只是为了方便组织
+
+在进程执行期间请不要控制任何 USB HID 输入设备, 否则可能出现问题
 
 |功能|目录|
 |-----|-----|
@@ -110,14 +116,17 @@ if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
 我们首先需要调整 yaml 文件中的配置
 
 ```yaml
-episode: 3 # 这个是我们需要取心的轮次
-delay: 5 # 这个是个轮次之间需要等待的时间数
-file: "E:\\pandownload1\\ML\\links.xlsx" # 这个是我们取心链接的 Excel 表的绝对地址
+delay: 10 # 这个是个轮次之间需要等待的时间数
+episode: 2 # 这个是我们需要取心的轮次
+file: E:\pandownload1\ML\links.xlsx # 这个是我们取心链接的 Excel 表的绝对地址, 路径不要有空格
+index: 0 # 起名编号, 取名为 "AAA送心员{index}"
 ```
 
 之后正常运行就可以了，可以在后面确定参数 --yaml config.yaml 指定需要读取的 yaml 文件
 
 ![image](./images/purchase_output.png)
+
+有进度条不用担心卡死，其实是为了等待取心网页的后端服务器，根据自己的需求灵活调整
 
 ### __自动游走跑图__
 

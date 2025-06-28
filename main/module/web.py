@@ -11,18 +11,12 @@ from tqdm import tqdm
 import pyperclip
 import re
 
-def opt_parser():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description="Web Crawler for Heart Collection")
-    parser.add_argument('--yaml', type=str, default="config.yaml", help='需要读取的 yaml 文件位置')
-    return parser.parse_args()
-
 class WebCrawler:
     def __init__(self, sigma:float=0.07):
         """初始化爬虫，设置高斯分布的标准差"""
         self.sigma = sigma
         self.browser_started = False  # 跟踪浏览器是否成功启动
-        self.codes = []
+        self.code = None
         
     def gauss_sleep(self, seconds:float=0.6, min_seconds:float=0.1) -> None:
         """暂停指定的秒数"""
@@ -56,8 +50,17 @@ class WebCrawler:
             
         return pd.DataFrame(dataframes), wait_time
 
-    def crawl_main(self, url="https://www.baidu.com/"):
+    def crawl_main(self, url="https://www.baidu.com/", headless=True, valid=False):
         """单次请求爬虫主函数, 不要太频繁地请求网页就可以"""
+        if valid:
+            print("您当前正咱运行在 VALID 验证环境中...请勿正式上线此版本...")
+            
+            code = 'APS5-S0EQ-DH2B' # 举例 APS5-S0EQ-DH2B
+            if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
+                print("识别到好友码:", code)
+                self.code = code
+            return
+            
         try:
             # 智能生成 User-Agent（基于真实统计数据）
             ua = UserAgent()
@@ -71,7 +74,7 @@ class WebCrawler:
             for option in user_options:
                 chrome_options.add_argument(option)
             
-            helium.start_chrome(url, headless=True, options=chrome_options)
+            helium.start_chrome(url, headless=headless, options=chrome_options)
             self.browser_started = True
             print("正在加载页面: {}".format(url))
             self.gauss_sleep(8) # 使用随机数用于逃过验证
@@ -133,7 +136,7 @@ class WebCrawler:
             code = pyperclip.paste() # 举例 APS5-S0EQ-DH2B
             if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
                 print("识别到好友码:", code)
-                self.codes.append(code)
+                self.code = code
             
             self.gauss_sleep(5)
             
@@ -143,17 +146,14 @@ class WebCrawler:
             if self.browser_started:
                 helium.kill_browser()
                 self.browser_started = False
-                
-    def receive_hearts(self):
-        '''用于处理接收到的好友码, 由于我们不使用多线程所以能保证数组访问的正确性'''
-        if not self.codes:
-            print("没有接收到任何好友码")
-            return
-        
-        for i in enumerate(self.codes):
-            pass
 
 if __name__ == "__main__":
+    def opt_parser():
+        """解析命令行参数"""
+        parser = argparse.ArgumentParser(description="Web Crawler for Heart Collection")
+        parser.add_argument('--yaml', type=str, default="config.yaml", help='需要读取的 yaml 文件位置')
+        return parser.parse_args()
+    
     # 取心地址, Excel 中要有一个表头为 url 在 (1, A) 位置
     opt = opt_parser()
     

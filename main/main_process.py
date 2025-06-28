@@ -3,14 +3,8 @@ import os
 os.environ["QT_SCALE_FACTOR"] = "1.0"
 os.environ['OMP_NUM_THREADS'] = '1'
 
-import sys
 import time
-from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, 
-                            QVBoxLayout, QWidget, QHBoxLayout, QSpacerItem, QSizePolicy)
-from PySide6.QtCore import Qt, QTimer, QThread, Signal, QRect, QPoint
-from PySide6.QtGui import (QColor, QPalette, QRegion, QPainterPath, 
-                          QCursor, QPainter, QPen)
-from deploy import NanokaDetector
+from PySide6.QtCore import QThread, Signal
 import cv2
 import pyautogui
 
@@ -20,21 +14,82 @@ pydirectinput.FAILSAFE = False
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import pandas as pd
+import yaml
+from tqdm import tqdm
 
-'''
-我们最后输出的数据格式
+from module.deploy import NanokaDetector
+from module.web import WebCrawler
 
-pdata = {
-    "code": 0, 
-    "info": "识别成功", 
-    "hearts_info": hearts_info, 
-    "pre_points": pre_points,
-    "post_points": post_points,
-    "labels": labels,
-}
-''' 
+# 爬虫线程 
+class CrawlerProgramThread(QThread):
+    finished = Signal()
+    
+    def __init__(self, sigma=0.07, yaml='config.yaml'):
+        super().__init__()
+        self.crawler = WebCrawler()
+        screenshot = np.array(pyautogui.screenshot())
+        self.height, self.width = int(screenshot.shape[0]), int(screenshot.shape[1])
+        self.sigma = sigma
+        self.yaml_path = yaml
 
-class MainProgramThread(QThread):
+    def gauss_sleep(self, seconds:float=0.6, min_seconds:float=0.1) -> None:
+        """暂停指定的秒数"""
+        time.sleep(max(min_seconds, random.gauss(seconds, self.sigma)))
+        
+    def screenshot(self) -> np.ndarray:
+        """获取当前屏幕截图"""
+        screenshot = pyautogui.screenshot()
+        frame = np.array(screenshot)
+        return frame
+    
+    def run(self):
+        data = None
+        with open(self.yaml_path, 'r', encoding='utf-8') as file:
+            data = yaml.safe_load(file)
+            file.close()
+        
+        pf = pd.read_excel(data['file'], sheet_name="Sheet1", names=["url"])
+        crawler = WebCrawler()
+        
+        for epoch in range(data['episode']):
+            ts = time.time()
+            print(f"第 {epoch + 1} 轮取心")
+            for index, row in pf.iterrows():
+                target_url = row['url']
+                crawler.crawl_main(target_url, valid=True)
+                
+                if crawler.code is not None:
+                    print(f"开始写入好友码: {crawler.code}")
+                    # 将好友码写入剪切板
+                    
+                    friend_name = "AAA送心员{}".format(data['index'])
+                    print(pd.DataFrame([[friend_name, crawler.code]], columns=['name', 'code']))
+                    data['index'] += 1
+                    
+                    with open(self.yaml_path, 'w+', encoding='utf-8') as file:
+                        yaml.dump(data, file, allow_unicode=True, sort_keys=True)
+                        file.close()
+                        
+                    
+                    
+                time.sleep(3)
+                
+            if epoch != data['episode'] - 1:
+                delay_time = 5
+                # 这里多加几秒的延迟响应时间, 同时这一轮最少也要等这么久，别响应太快了
+                with tqdm(total=data['delay'] + delay_time, desc=f"Time", unit='s') as pbar:
+                    diff = time.time() - ts
+                    pbar.update(int(diff))  # 更新进度条为当前时间
+                    for i in range(int(data['delay'] - int(diff) + delay_time)):
+                        time.sleep(1)
+                        pbar.update(1)
+                        
+        print("CrawlerProgramThread 线程已结束")
+        self.finished.emit()
+
+# 收集线程
+class HeartProgramThread(QThread):
     finished = Signal()
     
     def __init__(self, sigma=0.07):
@@ -45,8 +100,7 @@ class MainProgramThread(QThread):
         print("当前屏幕分辨率: {}x{}".format(self.width, self.height))
         self.sigma = sigma
         self.page = 0
-        
-###################################### 琐碎的函数 ######################################
+
     def gauss_sleep(self, seconds:float=0.6, min_seconds:float=0.1) -> None:
         """暂停指定的秒数"""
         time.sleep(max(min_seconds, random.gauss(seconds, self.sigma)))
@@ -70,8 +124,6 @@ class MainProgramThread(QThread):
         pf = self.detector.re_keyword_detector([text])
         return bool(pf['星盘页'].values[0])
 
-        
-###################################### 页面控制函数 ######################################
     def goto_page(self, page=0) -> bool:
         """跳转到指定的页数"""
         pyautogui.moveTo(1, 1)  # 移动鼠标到屏幕左上角
@@ -165,7 +217,6 @@ class MainProgramThread(QThread):
             
         return False, pdata, img
     
-###################################### 行为控制函数 ######################################
     def receive_hearts(self, hearts_info) -> None:
         """接收爱心的函数"""
         for i, (x, y, w, h) in enumerate(hearts_info):
@@ -367,157 +418,6 @@ class MainProgramThread(QThread):
             pre_points = pdata['pre_points']
             self.give_stars(pre_points=pre_points)
         
+        print("HeartProgramThread 线程已结束")
         self.finished.emit()
-
-class TransparentWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        
-        # 设置窗口属性
-        self.setWindowFlags(
-            Qt.FramelessWindowHint |  # 无边框
-            Qt.WindowStaysOnTopHint |  # 置顶
-            Qt.Tool  # 不在任务栏显示
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground)  # 背景透明
-        
-        # 设置窗口尺寸和位置（屏幕顶部）
-        screen_geometry = QApplication.primaryScreen().geometry()
-        self.setGeometry(100, 0, 300, 150)  # 调整宽度和高度
-        
-        # 鼠标拖动相关变量
-        self.dragging = False
-        self.offset = None
-        self.border_radius = 15  # 窗口圆角半径
-        
-        # 创建主布局
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
-        
-        # 顶部布局（用于退出按钮和拖动区域）
-        top_layout = QHBoxLayout()
-        
-        self.horizontal_spacer = QSpacerItem(
-            0,                      # 水平最小宽度（可设为0）
-            30,                     # 垂直最小高度
-            QSizePolicy.Expanding,  # 水平方向可扩展
-            QSizePolicy.Minimum     # 垂直方向固定
-        )
-        
-        self.mousePressEvent = self.start_drag
-        self.mouseMoveEvent = self.drag_move
-        self.mouseReleaseEvent = self.stop_drag
-        
-        # 圆角矩形退出按钮
-        self.exit_button = QPushButton("×")
-        self.exit_button.setFixedSize(25, 25)
-        self.exit_button.setStyleSheet("""
-            QPushButton {
-                background-color: #444444;
-                color: white;
-                border: none;
-                border-radius: 12px;  /* 圆角半径为宽度的一半，形成圆形 */
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background-color: #666666;
-            }
-        """)
-        self.exit_button.clicked.connect(self.quit_application)
-        
-        top_layout.addSpacerItem(self.horizontal_spacer)  # 占据剩余空间
-        top_layout.addWidget(self.exit_button)
-        
-        main_layout.addLayout(top_layout)
-        
-        # 固定宽度(250px)的主程序按钮
-        self.main_button = QPushButton("执行主程序")
-        self.main_button.setFixedSize(250, 40)  # 固定宽度250px，高度40px
-        self.main_button.setStyleSheet("""
-            QPushButton {
-                background-color: #555555;
-                color: white;
-                border: none;
-                border-radius: 20px;  /* 圆角半径为高度的一半，形成圆角矩形 */
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #777777;
-            }
-            QPushButton:pressed {
-                background-color: #444444;
-            }
-        """)
-        self.main_button.clicked.connect(self.run_main_program)
-        main_layout.addWidget(self.main_button, alignment=Qt.AlignCenter)
-        
-        # 设置主窗口
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        central_widget.setStyleSheet(f"background-color: rgba(0, 0, 0, 153);"  # 黑色，60%透明度
-                                    f"border-radius: {self.border_radius}px;")  # 圆角矩形
-        self.setCentralWidget(central_widget)
-        
-        # 创建主程序线程
-        self.main_thread = MainProgramThread()
-        self.main_thread.finished.connect(self.show_window)
     
-    def run_main_program(self):
-        # 隐藏窗口
-        self.hide()
-        time.sleep(1)  # 确保窗口隐藏后再执行主程序
-        
-        # 启动主程序线程
-        self.main_thread.start()
-    
-    def show_window(self):
-        # 显示窗口
-        self.show()
-    
-    def quit_application(self):
-        """安全退出应用程序并结束进程"""
-        # 确保线程已停止
-        if self.main_thread.isRunning():
-            self.main_thread.quit()
-            self.main_thread.wait()
-        
-        # 退出应用程序
-        QApplication.quit()
-    
-    # 鼠标拖动功能实现
-    def start_drag(self, event):
-        """鼠标按下事件，开始拖动"""
-        if event.button() == Qt.LeftButton:
-            self.dragging = True
-            self.offset = event.globalPosition().toPoint() - self.pos()
-    
-    def drag_move(self, event):
-        """鼠标移动事件，处理拖动"""
-        if self.dragging:
-            self.move(event.globalPosition().toPoint() - self.offset)
-    
-    def stop_drag(self, event):
-        """鼠标释放事件，停止拖动"""
-        self.dragging = False
-    
-    def resizeEvent(self, event):
-        """调整窗口大小时，重新设置圆角区域"""
-        path = QPainterPath()
-        path.addRoundedRect(QRect(0, 0, self.width(), self.height()), 
-                           self.border_radius, self.border_radius)
-        self.setMask(path.toFillPolygon().toPolygon())
-        super().resizeEvent(event)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    
-    # 设置全局字体，确保中文显示正常
-    font = app.font()
-    font.setFamily("SimHei")  # 使用黑体等中文字体
-    app.setFont(font)
-    
-    window = TransparentWindow()
-    window.show()
-    
-    sys.exit(app.exec())
