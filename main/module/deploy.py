@@ -12,6 +12,7 @@ import ddddocr
 from copy import copy
 from tqdm import tqdm
 from scipy.ndimage import median_filter
+from paddleocr import PaddleOCR
 
 # 全局配置
 class NanokaDetector():
@@ -31,8 +32,9 @@ class NanokaDetector():
 
         self.circle_radius = circle_radius
         self.ocr = ddddocr.DdddOcr(show_ad=False)
+        self.paddle_ocr = PaddleOCR(lang="ch")
 
-    def update_image(self, image):
+    def update_image(self, image) -> None:
         '''
         更新使用的图片, 我们可以直接调取这个图片进行分析
         '''
@@ -43,8 +45,7 @@ class NanokaDetector():
             
         self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
-    # 红色爱心检测器
-    def hue_detector(self, hue_threhold=15):
+    def hue_detector(self, hue_threhold=15) -> np.ndarray:
         '''
         检测 HSV 图片属性, 将爱心颜色取出并抑制椒盐噪声(来自星屑)
         '''
@@ -69,7 +70,7 @@ class NanokaDetector():
         heart_mask = cv2.medianBlur(cv2.medianBlur(mask, 11), 7)
         return heart_mask
 
-    def hearts_detector(self, plot=False, show=False):
+    def hearts_detector(self, plot=False, show=False) -> tuple:
         '''
         用于将爱心图片位置计算出来
         '''
@@ -112,8 +113,7 @@ class NanokaDetector():
         return targets, origin_image
         
         
-    # 亮点综合检测器
-    def threhold_detector(self, plot=False, show=False):
+    def threhold_detector(self, plot=False, show=False) -> tuple:
         '''
         利用检测点的圆形高亮特性确定目标点
         '''
@@ -172,7 +172,7 @@ class NanokaDetector():
         
         return np.array(targets, dtype=np.float32), np.array(anti_targets, dtype=np.float32), origin_image
 
-    def ocr_detector(self, gray=None, border_ratio=0.1):
+    def ocr_detector(self, gray=None, border_ratio=0.1) -> str:
         '''
         ddddocr 图像文字识别
         '''
@@ -195,7 +195,7 @@ class NanokaDetector():
             result = self.ocr.classification(img_bytes)
         return result
 
-    def re_keyword_detector(self, texts):
+    def re_keyword_detector(self, texts) -> pd.DataFrame:
         """
         ASCII字符清洗检测子串, 子串是提前规定好的
         """
@@ -218,7 +218,7 @@ class NanokaDetector():
             
         return pd.DataFrame(dataframes)
 
-    def image_spiltor(self):
+    def image_spiltor(self) -> tuple:
         '''
         用于将数据切分成我们想要的形式之后进行分类任务就可以了
         '''
@@ -244,7 +244,7 @@ class NanokaDetector():
         post_sub_gray = [self.gray[int(y-max(w,h)*post_scaler):int(y+max(w, h)*post_scaler), int(x-max(w, h)*post_scaler):int(x+max(w, h)*post_scaler)] for x, y, w, h in post]
         return pre_sub_gray, post_sub_gray, pre, post
 
-    def light_circle(self, image, radius=12):
+    def light_circle(self, image, radius=12) -> bool:
         '''
         检测圆形掩码内是都不为 0
         '''
@@ -256,7 +256,7 @@ class NanokaDetector():
         circle_pixels = image[circle_mask]
         return np.all(circle_pixels != 0)
 
-    def analyze_star(self, images, bound=35):
+    def analyze_star(self, images, bound=35) -> list:
         '''
         建立四个矩形选区检测是否存在星屑, 如果完全不存在那就是没有星屑, 因为文字只会最多占 3 选区, 这没测出来也是很倒霉了
         '''
@@ -277,7 +277,7 @@ class NanokaDetector():
             labels.append(1 if all_zero else 0)
         return labels
 
-    def analyze_octagram(self, images):
+    def analyze_octagram(self, images) -> tuple:
         '''
         检测图形中是否出现八角星星，如果没有出现我们就认为没有，如果过于混乱我们也不考虑, 我们可以校验圆心处的同心圆是否为单色
         '''
@@ -368,7 +368,7 @@ class NanokaDetector():
                     
         return octagram_detect_result, radius_list
         
-    def multi_detector(self, border_ratio=0.1, plot=False, show=False):
+    def multi_detector(self, border_ratio=0.1, plot=False, show=False) -> dict:
         '''
         多重鉴别器, 用于检测是否在星盘页并且判断类型
         '''
@@ -473,61 +473,156 @@ class NanokaDetector():
                     "labels":labels,
                 }, img
         return {"code":-2, "info":"无法预知的错误!"}, None
+    
+    def text_detector(self) -> pd.DataFrame:
+        '''
+        用于检测图像中的文字信息, 检测出我们需要的文本和对应 xywh 位置信息
+        '''
+        image = self.image.copy()
+        gray = self.gray.copy()
+
+        # 去除中心的亮光
+        _, binary_image = cv2.threshold(gray, 155, 255, cv2.THRESH_BINARY)
+        blured_image = cv2.blur(binary_image, (9,9))
+        median_image = cv2.medianBlur(blured_image, 7)
+        _, rebinary_image = cv2.threshold(median_image, 155, 255, cv2.THRESH_BINARY)
+        blured_image = cv2.blur(rebinary_image, (13,13))
+        _, rebinary_image = cv2.threshold(blured_image, 0, 255, cv2.THRESH_BINARY)
+
+        subtract_array = np.expand_dims(rebinary_image, axis=-1)
+        subtract_array = np.repeat(subtract_array, 3, axis=-1).astype(np.int32)*255
+        diff = image - subtract_array
+        image[diff < 0] = 0
+
+        image = np.clip(image, 0, 255).astype(np.uint8)
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+        # 二维快速傅里叶变换, 抑制低频信号
+        f = np.fft.fft2(gray)
+        f_shift = np.fft.fftshift(f)
+
+        rows, cols = gray.shape
+        crow, ccol = rows//2, cols//2
+        sigma = 20
+        y, x = np.ogrid[-crow:rows-crow, -ccol:cols-ccol]
+        mask_gaussian_high = 1 - np.exp(-(x*x + y*y)/(2*sigma**2)) # 高通做一次边缘检测
+
+        f_filtered_high = f_shift * mask_gaussian_high
+        # 逆中心化、FFT 逆变换、有理化
+        f_ishift_high = np.fft.ifftshift(f_filtered_high)
+        img_filtered_high = np.fft.ifft2(f_ishift_high)
+        img_filtered_high = np.abs(img_filtered_high)
+        fft_image = np.uint8(cv2.normalize(img_filtered_high, None, 0, 255, cv2.NORM_MINMAX))
+
+        _, fft_image = cv2.threshold(fft_image, 100, 255, cv2.THRESH_BINARY)
+
+        # 掩膜
+        height, width = gray.shape
+        border_ratio = 0.1
+        mask = np.zeros_like(image, dtype=np.uint8)
+        border_x = int(width * border_ratio)
+        border_y = int(height * border_ratio)
+        inner_width = width - 2 * border_x
+        inner_height = height - 2 * border_y
+
+        # 去掉扩展像素的中心
+        image_content = fft_image[border_y:border_y+inner_height, border_x:border_x+inner_width].copy()
+        blured_image = cv2.blur(image_content, (5,5))
+        _, circle_image = cv2.threshold(blured_image, 180, 255, cv2.THRESH_BINARY)
+        circle_image = cv2.blur(circle_image, (7,7))
+        _, circle_image = cv2.threshold(circle_image, 10, 255, cv2.THRESH_BINARY)
+
+        image_content -= circle_image
+
+        # 像素清洗
+        circle_image = cv2.blur(image_content, (3,3))
+        _, image_content = cv2.threshold(circle_image, 50, 255, cv2.THRESH_BINARY)
+        for _ in range(3):
+            circle_image = cv2.medianBlur(image_content, 7) 
+            _, image_content = cv2.threshold(circle_image, 50, 255, cv2.THRESH_BINARY)
+        # 像素扩展
+        for _ in range(6):
+            circle_image = cv2.blur(image_content, (7,7)) 
+            _, image_content = cv2.threshold(circle_image, 0, 255, cv2.THRESH_BINARY)
+
+        # 寻找连通区域
+        targets = []
+        contours, _ = cv2.findContours(image_content, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            targets.append((x, y, w, h))
+
+        text_area = [fft_image[border_y+y:border_y+y+h,border_x+x:border_x+x+w] for x,y,w,h in targets]
+
+        cv2.rectangle(image, (border_x, border_y), (border_x + inner_width, border_y + inner_height), 255, 5)
+        height, width = image_content.shape[:2]
+
+        df = []
+        for i, img in enumerate(text_area):
+            rgb_image = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+            result = ''.join(self.paddle_ocr.predict([rgb_image])[0]['rec_texts'])
+            
+            df.append([result, str(targets[i])])
+
+        return pd.DataFrame(df, columns=['result','position'])
 
 if __name__ == '__main__':
     '''首先创建空的分析器, 之后我们慢慢上传图片就可以了'''
     detector = NanokaDetector()  
     
-    # # 静态图片测试
-    # for filename in os.listdir(os.path.join("source", "data")):
-    #     if filename.endswith(".png") or filename.endswith(".jpg"):
-    #         print(f"\n\nProcessing {filename}...")
+    # 静态图片测试
+    BASE_DIR = os.path.abspath(os.path.join("..", "..", "sky-api", "source", "data"))
+    
+    for filename in os.listdir(BASE_DIR):
+        if filename.endswith(".png") or filename.endswith(".jpg"):
+            print(f"\n\nProcessing {filename}...")
 
-    #         detector.update_image(cv2.cvtColor(cv2.imread(os.path.join("source", "data", filename)), cv2.COLOR_BGR2RGB))
-    #         json_data, img = detector.multi_detector(plot=True, show=True)
-    #     else:
-    #         print(f"Skipping {filename}, not an image file.")
+            detector.update_image(cv2.cvtColor(cv2.imread(os.path.join(BASE_DIR, filename)), cv2.COLOR_BGR2RGB))
+            pf = detector.text_detector()
+            print(pf, '\n')
+        else:
+            print(f"Skipping {filename}, not an image file.")
             
-    # 视频测试
-    cap = cv2.VideoCapture(os.path.join("source", "valid.mp4"))
+    # # 视频测试
+    # cap = cv2.VideoCapture(os.path.join("source", "valid.mp4"))
     
-    # 获取视频的帧率和尺寸
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # # 获取视频的帧率和尺寸
+    # fps = cap.get(cv2.CAP_PROP_FPS)
+    # width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    # height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # 定义编码器并创建VideoWriter对象
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 编码器为MP4
-    writer = cv2.VideoWriter(os.path.join('runs', 'out.mp4'), fourcc, fps, (width, height))
+    # # 定义编码器并创建VideoWriter对象
+    # fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 编码器为MP4
+    # writer = cv2.VideoWriter(os.path.join('runs', 'out.mp4'), fourcc, fps, (width, height))
     
-    if not cap.isOpened():
-        print("Error: Could not open video.")
-        sys.exit()
+    # if not cap.isOpened():
+    #     print("Error: Could not open video.")
+    #     sys.exit()
         
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    print("开始处理视频文件")
-    with tqdm(total=total_frames, desc="Process ", unit="frames") as pbar:
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
+    # print("开始处理视频文件")
+    # with tqdm(total=total_frames, desc="Process ", unit="frames") as pbar:
+    #     while cap.isOpened():
+    #         ret, frame = cap.read()
+    #         if not ret:
+    #             break
             
-            detector.update_image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    #         detector.update_image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             
-            img = None
-            try:
-                pbar.update(1)
-                json_data, img = detector.multi_detector(plot=True, show=False)
-            except Exception as e:
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                # print(f"Error processing frame: {e}")
-            finally:
-                # 写入新的视频文件
-                if img is not None:
-                    img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                    writer.write(img_bgr)
+    #         img = None
+    #         try:
+    #             pbar.update(1)
+    #             json_data, img = detector.multi_detector(plot=True, show=False)
+    #         except Exception as e:
+    #             img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    #             # print(f"Error processing frame: {e}")
+    #         finally:
+    #             # 写入新的视频文件
+    #             if img is not None:
+    #                 img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    #                 writer.write(img_bgr)
                 
-    cap.release()
-    writer.release()
-    print("Video processing complete. Output saved to 'runs/out.mp4'.")
+    # cap.release()
+    # writer.release()
+    # print("Video processing complete. Output saved to 'runs/out.mp4'.")

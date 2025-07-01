@@ -20,3 +20,5 @@ selenium
 fake-useragent
 openpyxl
 pyyaml
+paddlepaddle
+paddleocr
