@@ -62,8 +62,7 @@ UI 仍然在开发中...
 |-----|-----|
 |README静态文件|images|
 |获取图像模态数据|data|
-|心火图形测试|heart|
-|主动领心|purchase|
+|光遇行为测试|sky-api|
 |YOLOv11目标检测|yolov11|
 |主程序|main|
 
