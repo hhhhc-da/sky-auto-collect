@@ -38,6 +38,9 @@ class CrawlerProgramThread(BaseThread):
         pass
     
     def run(self):
+        '''
+        请求爱心主线程，用来从行为上控制程序
+        '''
         data = None
         with open(self.yaml_path, 'r', encoding='utf-8') as file:
             data = yaml.safe_load(file)
@@ -250,6 +253,9 @@ class HeartProgramThread(BaseThread):
             
     
     def run(self):
+        '''
+        赠送心火主线程，用来从行为上控制程序
+        '''
         self.page = 0
         # 首先我们先把星盘定位到添加好友
         self.goto_page(0)  # 跳转到添加好友页

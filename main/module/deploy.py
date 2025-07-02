@@ -583,19 +583,34 @@ class NanokaDetector():
         backtrack(0, [])
         return result
 
-    def text_simularity(self, ocr_text, target) -> float:
+    def text_simularity(self, ocr_text, target, compare_length=8, n=4) -> float:
         '''
         用于计算文本与预设文本的相似度
 
-        限制: 重复文本检测限制极大，只用较小 N-gram 会导致连词缺陷无法精确比较，名字中尽量不要超过 4 次重复
-        原因: 检测使用 2-gram 结合 3-gram 进行检测，利用这些时空信息进行检测，并且匹配串越长权重越高（利用指数函数 y = exp(x)）
+        限制1: 重复文本检测限制极大，只用较小 N-gram 会导致连词缺陷无法精确比较，名字中尽量不要超过 4 次重复
+        原因1: 检测使用类似 2-gram 结合 3-gram 进行检测，利用这些时空信息进行检测，并且匹配串越长权重越高（利用指数函数 y = exp(x)）
+        
+        限制2: 目标文本必须比 OCR 文本长，最后必须是可比较 ID 串，无法比较时会自动使用最后的 n 个字符进行比较，否则无法进行有效的比较
+        原因2: 目标文本一般是我们预设的文本，OCR 文本一般是用户输入的文本，用户输入的文本一般比预设的文本短
         '''
         if len(target) < len(ocr_text):  # OCR 一般不能检测出更长的文本，基本都是更短的
             '''
+            简单的有前置规则的模式匹配，模板为 "AAA送心员{id}"
+            
             错误方法1：我们不能将文本取出 ocr_text[-n:] 进行识别（假如在 n 范围内则"AA送心员12"与"AA送心员1.2"不能区分）
             错误方法2：我们不能将文本随机取出 n 个到对应的个数，从中选取后进行删减，之后取最高可能的概率（"AA送心员1"与"AA送心员12"不能区分）
             '''
-            return -1
+            ocr_text_trunk = ocr_text[-compare_length:]
+            target_trunk = target[-compare_length:]
+            
+            similarity = self.text_simularity(self, ocr_text_trunk, target_trunk, compare_length=8, n=4)
+            if similarity > 0.5:
+                id1 = int(''.join([i for i in ocr_text[-n:] if i.isdigit()]))
+                id2 = int(''.join([i for i in target[-n:] if i.isdigit()]))
+                
+                if id1 == id2:
+                    return 1
+            return -1 # 特殊标识一下这不是直接计算出来的值
         
         sub_strings = self.text_combination(target)
         all_matches, z_matches = [], []
@@ -603,9 +618,10 @@ class NanokaDetector():
         # 收集所有匹配子串及其位置
         for sname in sub_strings:
             pattern = r'.{0,2}'.join(sname)
-            if bool(re.search(pattern, ocr_text)):
+            
+            if bool(re.search(pattern, ocr_text)): # 2-gram、3gram 计算
                 all_matches.append(sname)
-            if bool(re.search(pattern, target)):
+            if bool(re.search(pattern, target)): # Normalization
                 z_matches.append(sname)
 
         similarity = np.sum(np.exp([len(match_string) for match_string in all_matches]))/np.sum(np.exp([len(match_string) for match_string in z_matches]))
