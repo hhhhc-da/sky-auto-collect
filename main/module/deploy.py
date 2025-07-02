@@ -565,7 +565,52 @@ class NanokaDetector():
             df.append([result, str(targets[i])])
 
         return pd.DataFrame(df, columns=['result','position'])
+    
+    def text_combination(self, text) -> set:
+        """
+        用于计算长词的组合方式
+        """
+        result = set()
+        
+        def backtrack(start, path):
+            if path and len(path) < len(text) and 1 < len(path) <= 3:
+                result.add(''.join(path))
+            for i in range(start, len(text)):
+                path.append(text[i])
+                backtrack(i + 1, path)
+                path.pop()
+        
+        backtrack(0, [])
+        return result
 
+    def text_simularity(self, ocr_text, target) -> float:
+        '''
+        用于计算文本与预设文本的相似度
+
+        限制: 重复文本检测限制极大，只用较小 N-gram 会导致连词缺陷无法精确比较，名字中尽量不要超过 4 次重复
+        原因: 检测使用 2-gram 结合 3-gram 进行检测，利用这些时空信息进行检测，并且匹配串越长权重越高（利用指数函数 y = exp(x)）
+        '''
+        if len(target) < len(ocr_text):  # OCR 一般不能检测出更长的文本，基本都是更短的
+            '''
+            错误方法1：我们不能将文本取出 ocr_text[-n:] 进行识别（假如在 n 范围内则"AA送心员12"与"AA送心员1.2"不能区分）
+            错误方法2：我们不能将文本随机取出 n 个到对应的个数，从中选取后进行删减，之后取最高可能的概率（"AA送心员1"与"AA送心员12"不能区分）
+            '''
+            return -1
+        
+        sub_strings = self.text_combination(target)
+        all_matches, z_matches = [], []
+        
+        # 收集所有匹配子串及其位置
+        for sname in sub_strings:
+            pattern = r'.{0,2}'.join(sname)
+            if bool(re.search(pattern, ocr_text)):
+                all_matches.append(sname)
+            if bool(re.search(pattern, target)):
+                z_matches.append(sname)
+
+        similarity = np.sum(np.exp([len(match_string) for match_string in all_matches]))/np.sum(np.exp([len(match_string) for match_string in z_matches]))
+        return similarity
+    
 if __name__ == '__main__':
     '''首先创建空的分析器, 之后我们慢慢上传图片就可以了'''
     detector = NanokaDetector()  
@@ -578,8 +623,23 @@ if __name__ == '__main__':
             print(f"\n\nProcessing {filename}...")
 
             detector.update_image(cv2.cvtColor(cv2.imread(os.path.join(BASE_DIR, filename)), cv2.COLOR_BGR2RGB))
+            
             pf = detector.text_detector()
             print(pf, '\n')
+            
+            if "互火A" in pf['result'].values[0]:
+                pass
+            
+            dc, img = detector.multi_detector(border_ratio=0.1)
+            if dc['code'] != 0:
+                print(f"Error: {dc['info']}")
+                continue
+            
+            points = []
+            for dp in [dc["hearts_info"], dc["pre_points"], dc["post_points"]]:
+                points.extend(dp)
+            print(pd.DataFrame(points, columns=['x', 'y', 'w', 'h']))
+            
         else:
             print(f"Skipping {filename}, not an image file.")
             
