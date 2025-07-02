@@ -34,8 +34,15 @@ class CrawlerProgramThread(BaseThread):
 
     
     def search_friend_name(self) -> None:
-        """寻找对应名字的好友的星星, 之后还要点进去进行校验"""
+        '''
+        寻找对应名字的好友的星星位置
+        '''
         pass
+    
+    def goto_meet(self) -> None:
+        '''
+        传送到对应房间并接收爱心
+        '''
     
     def run(self):
         '''
@@ -67,6 +74,8 @@ class CrawlerProgramThread(BaseThread):
                         yaml.dump(data, file, allow_unicode=True, sort_keys=True)
                         file.close()
                         
+                    self.search_friend_name()
+                        
                 time.sleep(3)
                 
             if epoch != data['episode'] - 1:
@@ -92,7 +101,9 @@ class HeartProgramThread(BaseThread):
         self.detector = NanokaDetector()
     
     def receive_hearts(self, hearts_info) -> None:
-        """接收爱心的函数"""
+        '''
+        接收爱心的函数, 完全是操纵行为
+        '''
         for i, (x, y, w, h) in enumerate(hearts_info):
             # 移动鼠标到目标中心, 考虑了屏幕分辨率的影响
             timeout = 3
@@ -158,7 +169,9 @@ class HeartProgramThread(BaseThread):
                 self.gauss_sleep(wait_responce_sec)
                 
     def receive_stars(self, post_points, labels) -> None:
-        """接收心火的函数"""
+        '''
+        接收心火的函数, 完全是操纵行为
+        '''
         for i, ((x, y, w, h), cls) in enumerate(zip(post_points, labels)):
             # 星屑检测结果, 同时过滤鼠标效果
             if int(cls) == 0:
@@ -204,7 +217,9 @@ class HeartProgramThread(BaseThread):
                     raise RuntimeError("无法定位到星盘页，请检查程序运行状态")
     
     def give_stars(self, pre_points) -> None:
-        """送出心火的函数"""
+        '''
+        送出心火的函数, 完全是操纵行为
+        '''
         # 逐个处理检测到的目标
         for i, (x, y, w, h) in enumerate(pre_points):
             # 第一轮判断

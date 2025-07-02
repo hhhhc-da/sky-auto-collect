@@ -80,9 +80,9 @@ UI 仍然在开发中...
 
 目前这一版是我比较满意的一版，可以看出来已经能识别出爱心、还有其他需要收、送心火的点
 
-![image](./images/machine_vision.png)
+目前还可以识别文字在图片中的位置
 
-![image](./images/machine_vision2.png)
+![image](./images/machine_vision.png)
 
 HSV 色相检测爱心，之后用四角星检测是否需要送心火，八角星不需要送
 

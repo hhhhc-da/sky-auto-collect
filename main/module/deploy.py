@@ -566,14 +566,14 @@ class NanokaDetector():
 
         return pd.DataFrame(df, columns=['result','position'])
     
-    def text_combination(self, text) -> set:
+    def text_combination(self, text, min_gap=1, max_gap=3) -> set:
         """
         用于计算长词的组合方式
         """
         result = set()
         
         def backtrack(start, path):
-            if path and len(path) < len(text) and 1 < len(path) <= 3:
+            if path and len(path) < len(text) and min_gap < len(path) <= max_gap:
                 result.add(''.join(path))
             for i in range(start, len(text)):
                 path.append(text[i])
@@ -583,7 +583,7 @@ class NanokaDetector():
         backtrack(0, [])
         return result
 
-    def text_simularity(self, ocr_text, target, compare_length=8, n=4) -> float:
+    def text_simularity(self, ocr_text, target, compare_length=8, n=4, min_gap=1, max_gap=3) -> float:
         '''
         用于计算文本与预设文本的相似度
 
@@ -600,19 +600,20 @@ class NanokaDetector():
             错误方法1：我们不能将文本取出 ocr_text[-n:] 进行识别（假如在 n 范围内则"AA送心员12"与"AA送心员1.2"不能区分）
             错误方法2：我们不能将文本随机取出 n 个到对应的个数，从中选取后进行删减，之后取最高可能的概率（"AA送心员1"与"AA送心员12"不能区分）
             '''
-            ocr_text_trunk = ocr_text[-compare_length:]
-            target_trunk = target[-compare_length:]
+            truck_size = max(np.min([compare_length, len(ocr_text), len(target)]) - 1, 1)
+            ocr_text_trunk = ocr_text[-truck_size:]
+            target_trunk = target[-truck_size:]
             
-            similarity = self.text_simularity(self, ocr_text_trunk, target_trunk, compare_length=8, n=4)
+            similarity = self.text_simularity(ocr_text_trunk, target_trunk, min_gap=min_gap, max_gap=max_gap, n=n)
             if similarity > 0.5:
-                id1 = int(''.join([i for i in ocr_text[-n:] if i.isdigit()]))
-                id2 = int(''.join([i for i in target[-n:] if i.isdigit()]))
+                id1 = ''.join([i for i in ocr_text[-n:] if i.isdigit()])
+                id2 = ''.join([i for i in target[-n:] if i.isdigit()])
                 
-                if id1 == id2:
+                if id1 == id2: # 增强鲁棒性不用转换
                     return 1
             return -1 # 特殊标识一下这不是直接计算出来的值
         
-        sub_strings = self.text_combination(target)
+        sub_strings = self.text_combination(target, max_gap=max_gap, min_gap=min_gap)  # 计算目标文本的所有子串组合
         all_matches, z_matches = [], []
         
         # 收集所有匹配子串及其位置
@@ -637,16 +638,17 @@ if __name__ == '__main__':
     for filename in os.listdir(BASE_DIR):
         if filename.endswith(".png") or filename.endswith(".jpg"):
             print(f"\n\nProcessing {filename}...")
+            
+            image = cv2.cvtColor(cv2.imread(os.path.join(BASE_DIR, filename)), cv2.COLOR_BGR2RGB)
+            
+            height, width = image.shape[:2]
+            border_ratio = 0.1
+            border_x = int(width * border_ratio)
+            border_y = int(height * border_ratio)
 
-            detector.update_image(cv2.cvtColor(cv2.imread(os.path.join(BASE_DIR, filename)), cv2.COLOR_BGR2RGB))
+            detector.update_image(image)
             
-            pf = detector.text_detector()
-            print(pf, '\n')
-            
-            if "互火A" in pf['result'].values[0]:
-                pass
-            
-            dc, img = detector.multi_detector(border_ratio=0.1)
+            dc, img = detector.multi_detector(border_ratio=0.1, plot=True)
             if dc['code'] != 0:
                 print(f"Error: {dc['info']}")
                 continue
@@ -655,6 +657,28 @@ if __name__ == '__main__':
             for dp in [dc["hearts_info"], dc["pre_points"], dc["post_points"]]:
                 points.extend(dp)
             print(pd.DataFrame(points, columns=['x', 'y', 'w', 'h']))
+            
+            pf = detector.text_detector()
+            
+            # 查找叫罐头的文本在哪
+            target = '罐头'
+            for i, name in enumerate(pf['result'].values):
+                similarity = detector.text_simularity(ocr_text=name, target=target, compare_length=8, n=4, min_gap=0, max_gap=3)
+                print(f"Text: {name}, Similarity to '{target}': {similarity:.2f}")
+                
+                if similarity == 1:
+                    print(pf, '\n', pf[pf['result'] == name])
+                    data = pf[pf['result'] == name]['position'].values[0]
+                    print("xywh:", data)
+                    x, y, w, h = eval(data)
+                    # 绘制矩形框
+                    cv2.rectangle(img, (border_x + x, border_y + y), (border_x + x + w, border_y + y + h), color=(0,255,255), thickness=3)
+                    
+            fig, axes = plt.subplots(1, 1, figsize=(15,6))
+            axes.imshow(img)
+            plt.axis('off')
+            axes.set_title("Result")
+            plt.show()
             
         else:
             print(f"Skipping {filename}, not an image file.")
