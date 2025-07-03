@@ -10,13 +10,13 @@ import numpy as np
 import pandas as pd
 import ddddocr
 from copy import copy
-from tqdm import tqdm
 from scipy.ndimage import median_filter
 from paddleocr import PaddleOCR
+import yaml
 
 # 全局配置
 class NanokaDetector():
-    def __init__(self, image=None, circle_radius=20):
+    def __init__(self, image=None, circle_radius=20, yaml_path='config.yaml'):
         super(NanokaDetector, self).__init__()
 
         if image != None:
@@ -33,17 +33,22 @@ class NanokaDetector():
         self.circle_radius = circle_radius
         self.ocr = ddddocr.DdddOcr(show_ad=False)
         self.paddle_ocr = PaddleOCR(lang="ch")
+        self.yaml_path = yaml_path
 
-    def update_image(self, image) -> None:
+    def update_image(self, image=None, yaml_path=None) -> None:
         '''
         更新使用的图片, 我们可以直接调取这个图片进行分析
         '''
-        if image.shape[0] == 1080 and image.shape[1] == 1920:
-            self.image = image
-        else:
-            self.image = cv2.resize(image, (1080, 1920))
+        if yaml_path is not None:
+            self.yaml_path = yaml_path
             
-        self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        if image is not None:
+            if image.shape[0] == 1080 and image.shape[1] == 1920:
+                self.image = image
+            else:
+                self.image = cv2.resize(image, (1080, 1920))
+                
+            self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
     def hue_detector(self, hue_threhold=15) -> np.ndarray:
         '''
@@ -199,21 +204,29 @@ class NanokaDetector():
         """
         ASCII字符清洗检测子串, 子串是提前规定好的
         """
-        patterns = [r'添[\x00-\x7F]{0,3}加[\x00-\x7F]{0,3}好[\x00-\x7F]{0,3}友', r'好[\x00-\x7F]{0,3}友', r'挚[\x00-\x7F]{0,3}友']
+        data = None
+        with open(self.yaml_path, 'r', encoding='utf-8') as file:
+            data = yaml.safe_load(file)
+            file.close()
+
         dataframes = {
             '识别文本': [],
             '星盘页': [],
             '添加好友': [],
             '好友': [],
-            '挚友': [],
+            '挚友': []
         }
-    
+        
+        patterns = [r'添[\x00-\x7F]{0,3}加[\x00-\x7F]{0,3}好[\x00-\x7F]{0,3}友', r'好[\x00-\x7F]{0,3}友']
+        for text in data['texts']:
+            patterns.append(r'[\x00-\x7F]{0,3}'.join([ch for ch in text]))
+
         for text in texts:
             matchs = list([bool(re.search(pattern, text)) for pattern in patterns])
             dataframes['星盘页'].append(True in matchs)
             dataframes['添加好友'].append(matchs[0] == True)
             dataframes['好友'].append(matchs[1] == True)
-            dataframes['挚友'].append(matchs[2] == True)
+            dataframes['挚友'].append(True in matchs[2:])
             dataframes['识别文本'].append(text)
             
         return pd.DataFrame(dataframes)

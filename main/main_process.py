@@ -98,7 +98,7 @@ class HeartProgramThread(BaseThread):
     def __init__(self, sigma=0.07):
         super().__init__(sigma=sigma)
         
-        self.detector = NanokaDetector()
+        self.detector = NanokaDetector(yaml='config.yaml', sigma=sigma)
     
     def receive_hearts(self, hearts_info) -> None:
         '''
