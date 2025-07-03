@@ -2,4 +2,6 @@ delay: 10
 episode: 2
 file: E:\pandownload1\ML\links.xlsx
 index: 4
-texts: ["挚友"]
+texts: 
+- "挚友"
+- "笨笨"

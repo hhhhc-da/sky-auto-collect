@@ -27,7 +27,13 @@ class WebCrawler:
         ASCII字符清洗检测子串, 最大程度保证我们能点到正确的内容
         """
         wait_time = 0
-        patterns = [r'确[\x00-\x7F]{0,5}定', r'取.*?爱心', r'复[\x00-\x7F]{0,2}制[\x00-\x7F]{0,2}编[\x00-\x7F]{0,2}码', r'请[\x00-\x7F]{0,8}秒后领取']
+        patterns = [
+            r'确[\x00-\x7F]{0,5}定', 
+            r'取.*?爱心', 
+            r'复[\x00-\x7F]{0,2}制[\x00-\x7F]{0,2}编[\x00-\x7F]{0,2}码', 
+            r'请[\x00-\x7F]{0,8}秒后领取'
+        ]
+        
         dataframes = {
             '确定': [],
             '取爱心': [],
@@ -76,7 +82,7 @@ class WebCrawler:
             helium.start_chrome(url, headless=headless, options=chrome_options)
             self.browser_started = True
             print("正在加载页面: {}".format(url))
-            self.gauss_sleep(8) # 使用随机数用于逃过验证
+            self.gauss_sleep(10) # 使用随机数用于逃过验证
             
             texts = []
             buttons = helium.find_all(helium.S("button"))

@@ -3,8 +3,9 @@ import os
 os.environ["QT_SCALE_FACTOR"] = "1.0"
 os.environ['OMP_NUM_THREADS'] = '1'
 
+import math
 import time
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 import cv2
 import pyautogui
 
@@ -29,20 +30,236 @@ class CrawlerProgramThread(BaseThread):
     def __init__(self, sigma=0.07, yaml='config.yaml'):
         super().__init__(sigma=sigma)
         
-        self.crawler = WebCrawler()
+        self.sigma = sigma
         self.yaml_path = yaml
+        
+        self.detector = NanokaDetector(yaml_path=self.yaml_path, paddle_ocr_on=True)
+        self.crawler = WebCrawler()
+        
+    def goto_page(self, page=0) -> bool:
+        '''
+        跳转到指定的页数, 重写虚函数跳转到指定页面
+        '''
+        self.mouse_clear()  # 清除鼠标位置，避免干扰检测
+        
+        timeout = 50
+        while timeout > 0:
+            screenshot = pyautogui.screenshot()
+            frame = np.array(screenshot)
+            self.detector.update_image(frame)  # 更新检测器的图像数据
+            
+            timeout_detector = 3  # 每次检测最多尝试 3 次
+            while timeout_detector > 0:
+                try:
+                    code = self.check_page()
+                    if code in [0, 1]: # 如果是添加好友页或者在星盘内
+                        break
+                except Exception as e:
+                    print("捕捉到 Exception:", e)
+                    timeout_detector -= 1
+                   
+            if code != 1:
+                timeout -= 1
+                
+                # 不停向左检测图片
+                self.last_page()
+                continue
+            
+            break
+        
+        if timeout <= 0:
+            print("未检测到添加好友页")
+            return False
 
-    
-    def search_friend_name(self) -> None:
+        # 跳转到指定页面
+        for _ in range(page):
+            self.faster_next_page()
+        
+        return True
+        
+    def check_page(self) -> int:
         '''
-        寻找对应名字的好友的星星位置
+        检查当前页面是否是正常星盘页, 纯净版, 这一部分再次被重写, 将来可能会并回主线
         '''
-        pass
+        code = None
+
+        text = self.detector.ocr_detector()
+        pf = self.detector.re_keyword_detector([text])
+        code = None
     
-    def goto_meet(self) -> None:
+        if not bool(pf['星盘页'].values[0]):
+            code = -1
+        elif bool(pf['添加好友'].values[0]):
+            code = 1
+        elif bool(pf['好友'].values[0]) or bool(pf['挚友'].values[0]):
+            code = 0
+            
+        return code
+    
+    def search_friend_name(self, find_target='', plot=False, show=False) -> None:
+        '''
+        寻找对应名字的好友的星星位置, 这里就开始操控了
+        '''
+        # 首先对准星盘使用, 按下 g 进入星盘页
+        pydirectinput.keyDown('g')
+        self.gauss_sleep(0.6)
+        pydirectinput.keyUp('g')
+        self.gauss_sleep(4)
+        
+        self.page = 0
+        # 首先我们先把星盘定位到添加好友
+        self.goto_page(0)  # 跳转到添加好友页
+        
+        timeout = 50  # 最多 50 页好友, 不能比这还多了吧???
+        while timeout > 0:
+            self.next_page() # 3s 延时
+            self.mouse_clear() # 0.5s 延时
+
+            # 截屏并分析
+            frame = self.screenshot()
+            self.detector.update_image(frame) 
+            code = self.check_page()
+            if code == 1:
+                print("检测到添加好友页，退出程序")
+                break
+            
+            if True:
+            # try:
+                # 开始解析需要传送的好友信息
+                pf = self.detector.text_detector()
+                
+                target, star_pos, text_info = find_target, None, []
+                for i, name in enumerate(pf['result'].values):
+                    similarity = self.detector.text_simularity(ocr_text=name, target=target, min_gap=0, max_gap=3)
+                    # print(f"Text: {name}, Similarity to '{target}': {similarity:.2f}")
+                    
+                    if similarity > 0.95: # 高于这个阈值的都被拿出来考量一下
+                        xywh = eval(pf[pf['result'] == name]['position'].values[0]) # xywh
+                        text_info.append([name, xywh, similarity])
+                  
+                if len(text_info) == 0:
+                    print("没有找到好友，开始寻找下一页")
+                    continue  # 如果没有找到对应的好友就跳过这次循环
+                
+                # 对文本信息按照相似度进行排序
+                sorted(text_info, key=lambda x: x[2], reverse=True)
+                print(f"找到相似的名称如下:\n{pf}")
+                        
+                dc, img = None, None
+                timeout_detector = 3  # 每次检测最多尝试 3 次
+                while timeout_detector > 0:
+                    try:
+                        dc, img = self.detector.multi_detector(plot=plot, show=show)
+                        if dc is not None and dc['code'] in [0, 1]:
+                            break
+                    except Exception as e:
+                        print(f"检测失败: {e}")
+                        timeout_detector -= 1
+                        self.gauss_sleep(0.3) # 等待下一次检测, 每约 0.3s 检测一次
+                        continue
+
+                if dc['code'] != 0:
+                    print(f"Error: dc = {dc['info']}, 不满足前置条件")
+                    continue
+                
+                points = []
+                for dp in [dc["hearts_info"], dc["pre_points"], dc["post_points"]]:
+                    points.extend(dp)
+                print(pd.DataFrame(points, columns=['x', 'y', 'w', 'h'])) # 请记住，这两个使用的都是中心点
+                
+                closest_star_pos, text_pos = None, None
+                min_distance = float('inf')
+                
+                # 逐个检测星星中心与文本中心的距离, 取出距离最近的那个点
+                for i, (name, xywh, similarity) in enumerate(text_info):
+                    closest_star_pos = None
+                    min_distance = float('inf')
+                    
+                    for x, y, w, h in points:
+                        # 不能只看是不是离得近，还要看是否在文本框内
+                        if (xywh[0] < x < xywh[0]+xywh[2]) and (xywh[1] < y < xywh[1]+xywh[3]):
+                            print("找到文本框内的无效点, 本点不作为有效点，跳过")
+                            continue
+                        
+                        star_pos = [x, y]
+                        distance = math.sqrt((star_pos[0] - xywh[0])**2 + (star_pos[1] - xywh[1])**2)
+                        
+                        if distance < min_distance:
+                            closest_star_pos = star_pos
+                            min_distance = distance
+                            
+                    if min_distance < 2 * math.sqrt(xywh[2]**2 + xywh[3]**2): # 校验
+                        print(f"找到好友 {name} 的星星位置: {closest_star_pos}, 文本相似度: {similarity:.2f}, 距离: {min_distance:.2f}")
+                
+                        # 找到点了之后开始移动即可
+                        self.goto_meet(text_pos=text_pos, star_pos=closest_star_pos)
+                        return 
+                
+            # except Exception as e:
+            #     print(f"捕捉到 Exception: {e}")
+            #     continue
+             
+    
+    def goto_meet(self, text_pos=None, star_pos=None) -> None:
         '''
         传送到对应房间并接收爱心
         '''
+        pyautogui.moveTo(star_pos)
+        self.gauss_sleep(0.5)  # 等待鼠标移动完成
+        
+        timeout = 3
+        while timeout > 0:
+            if self.check_text(): # 我们现在应该在星盘页才对
+                pyautogui.moveTo(int(x*self.width//1920), int(y*self.height//1080)) 
+                self.gauss_sleep(0.1)
+                pydirectinput.click()  # 点击目标，没送心火的话进入到了送心的人的星盘页
+                self.gauss_sleep(2)
+                break
+            else:
+                print("检测到我们不在星盘页需要重新定位") # 由于是自动程序控制所以不用担心在这里卡死
+                timeout -= 1
+                
+                pydirectinput.keyDown('g')
+                self.gauss_sleep(0.1)
+                pydirectinput.keyUp('g')
+                self.gauss_sleep(2)
+                
+                self.goto_page(self.page)
+                continue
+        if timeout == 0:
+            raise RuntimeError("无法定位到星盘页，请检查程序运行状态")
+        
+        # 这里有一个分歧, 如果检测出来没有文字了那么我们就不再点一次了
+        if self.check_text():
+            pydirectinput.click()  # 点击目标， 这次一定进入大屏星盘页
+            self.gauss_sleep(2)
+        
+        for _ in range(5):
+            pydirectinput.keyDown('up')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('up')
+            self.gauss_sleep(0.3)
+            
+        for _ in range(2):
+            pydirectinput.keyDown('down')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('down')
+            self.gauss_sleep(0.1)
+            
+        self.gauss_sleep(0.4)  # 等待响应
+            
+        # 如果这里意外颠倒了其他按钮, 尤其是删除或拉黑好友, 我们要做出应急响应
+        pydirectinput.keyDown('space')
+        self.gauss_sleep(0.1)
+        pydirectinput.keyUp('space')
+        self.gauss_sleep(0.5)
+        
+        # 加入我们点错了, 我们这一步不能回到星盘页
+        pydirectinput.keyDown('esc')
+        self.gauss_sleep(0.1)
+        pydirectinput.keyUp('esc')
+        
+        print("函数未实现, 请重写 goto_meet 函数")
     
     def run(self):
         '''
@@ -74,7 +291,7 @@ class CrawlerProgramThread(BaseThread):
                         yaml.dump(data, file, allow_unicode=True, sort_keys=True)
                         file.close()
                         
-                    self.search_friend_name()
+                    self.search_friend_name(find_target="小夜-固玩-不许乐")
                         
                 time.sleep(3)
                 
@@ -95,10 +312,101 @@ class CrawlerProgramThread(BaseThread):
 class HeartProgramThread(BaseThread):
     finished = Signal()
     
-    def __init__(self, sigma=0.07):
+    def __init__(self, sigma=0.07, yaml='config.yaml'):
         super().__init__(sigma=sigma)
         
-        self.detector = NanokaDetector(yaml='config.yaml', sigma=sigma)
+        self.sigma = sigma
+        self.yaml_path = yaml
+        
+        self.detector = NanokaDetector(yaml_path=self.yaml_path)
+        
+    # override
+    def goto_page(self, page=0) -> bool:
+        '''
+        跳转到指定的页数, 重写虚函数
+        '''
+        pyautogui.moveTo(1, 1)  # 移动鼠标到屏幕左上角
+        self.gauss_sleep(0.5)  # 等待鼠标移动完成
+        
+        timeout = 50
+        while timeout > 0:
+            screenshot = pyautogui.screenshot()
+            frame = np.array(screenshot)
+            self.detector.update_image(frame)  # 更新检测器的图像数据
+            
+            pdata = None
+            timeout_detector = 3  # 每次检测最多尝试 3 次
+            while timeout_detector > 0:
+                try:
+                    pdata, _ = self.detector.multi_detector(plot=False, show=False)
+                    if pdata is not None:
+                        break
+                except Exception as e:
+                    print("捕捉到 Exception:", e)
+                    timeout_detector -= 1
+                   
+            if pdata['code'] != 1:
+                timeout -= 1
+                
+                # 不停向左检测图片
+                pydirectinput.keyDown('z')
+                self.gauss_sleep(0.6)
+                pydirectinput.keyUp('z')
+                self.gauss_sleep(1.2)
+                continue
+            
+            break
+        
+        if timeout <= 0:
+            print("未检测到添加好友页")
+            return False
+
+        # 跳转到指定页面
+        for _ in range(page):
+            pydirectinput.keyDown('c')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('c')
+            self.gauss_sleep(0.3)
+        
+        return True
+        
+    def check_page(self, plot=False, show=False) -> tuple:
+        '''
+        检查当前页面是否是正常星盘页, 但是使用 multi_detector 进行操作
+        '''
+        pyautogui.moveTo(1, 1)  # 移动鼠标到屏幕左上角
+        self.gauss_sleep(0.5)  # 等待鼠标移动完成
+            
+        pdata, img = None, None
+        timeout_detector = 3  # 每次检测最多尝试 3 次
+        while timeout_detector > 0:
+            try:
+                pdata, img = self.detector.multi_detector(plot=plot, show=show)
+                if pdata is not None and pdata['code'] in [0, 1]:
+                    break
+            except Exception as e:
+                print(f"检测失败: {e}")
+                timeout_detector -= 1
+                continue
+            
+            timeout_detector -= 1
+            self.gauss_sleep(0.3) # 等待下一次检测, 每约 0.3s 检测一次
+            
+        if pdata['code'] == 1:
+            print("检测到添加好友页，退出程序")
+            pydirectinput.keyDown('esc')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('esc')
+            return True, None, None
+            
+        if img is not None:
+            plt.figure(figsize=(10, 6))
+            plt.imshow(img)
+            plt.axis('off')
+            plt.savefig(os.path.join('runs', 'predict', f'page{self.page}.png'))
+            plt.close()
+            
+        return False, pdata, img
     
     def receive_hearts(self, hearts_info) -> None:
         '''
@@ -271,6 +579,12 @@ class HeartProgramThread(BaseThread):
         '''
         赠送心火主线程，用来从行为上控制程序
         '''
+        # 首先对准星盘使用, 按下 g 进入星盘页
+        pydirectinput.keyDown('g')
+        self.gauss_sleep(0.6)
+        pydirectinput.keyUp('g')
+        self.gauss_sleep(4)
+        
         self.page = 0
         # 首先我们先把星盘定位到添加好友
         self.goto_page(0)  # 跳转到添加好友页

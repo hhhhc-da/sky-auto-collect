@@ -1,5 +1,6 @@
-delay: 10
-episode: 2
+delay: 600
+episode: 1
 file: E:\pandownload1\ML\links.xlsx
-index: 4
-texts: ["挚友"]
+index: 16
+texts:
+- 挚友

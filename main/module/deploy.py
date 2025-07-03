@@ -16,7 +16,7 @@ import yaml
 
 # 全局配置
 class NanokaDetector():
-    def __init__(self, image=None, circle_radius=20, yaml_path='config.yaml'):
+    def __init__(self, image=None, circle_radius=20, yaml_path='config.yaml', paddle_ocr_on=False):
         super(NanokaDetector, self).__init__()
 
         if image != None:
@@ -32,7 +32,9 @@ class NanokaDetector():
 
         self.circle_radius = circle_radius
         self.ocr = ddddocr.DdddOcr(show_ad=False)
-        self.paddle_ocr = PaddleOCR(lang="ch")
+        if paddle_ocr_on:
+            self.paddle_ocr = PaddleOCR(lang="ch")
+            
         self.yaml_path = yaml_path
 
     def update_image(self, image=None, yaml_path=None) -> None:
@@ -410,14 +412,8 @@ class NanokaDetector():
             return {"code":1, "info":"本页面为添加好友页"}, None
     
         if bool(pf['好友'].values[0]) or bool(pf['挚友'].values[0]):
-            # print("检测为有效的星盘页")
-
             hearts_info, _ = self.hearts_detector()
-            
-            # 首先计算出我们的小点和大点
             pre_sub_gray, post_sub_gray, pre_points, post_points =  self.image_spiltor()
-
-            # 检测出每个 post 的类型用于确定星屑, 为 0 的就是需要收心火的, 为 1 的就是不需要收心火的
             labels = self.analyze_star(post_sub_gray, bound=25)
 
             pre_octagram_detect_result, pre_radius_list = self.analyze_octagram(pre_sub_gray)
@@ -485,6 +481,7 @@ class NanokaDetector():
                     "post_points":post_points,
                     "labels":labels,
                 }, img
+            
         return {"code":-2, "info":"无法预知的错误!"}, None
     
     def text_detector(self) -> pd.DataFrame:
@@ -563,9 +560,9 @@ class NanokaDetector():
         contours, _ = cv2.findContours(image_content, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
-            targets.append((x, y, w, h))
+            targets.append((border_x+x+w//2, border_y+y+h//2, w, h))
 
-        text_area = [fft_image[border_y+y:border_y+y+h,border_x+x:border_x+x+w] for x,y,w,h in targets]
+        text_area = [fft_image[y-h//2: y+h//2, x-w//2: x+w//2] for x, y, w, h in targets]
 
         cv2.rectangle(image, (border_x, border_y), (border_x + inner_width, border_y + inner_height), 255, 5)
         height, width = image_content.shape[:2]
@@ -617,7 +614,7 @@ class NanokaDetector():
             ocr_text_trunk = ocr_text[-truck_size:]
             target_trunk = target[-truck_size:]
             
-            similarity = self.text_simularity(ocr_text_trunk, target_trunk, min_gap=min_gap, max_gap=max_gap, n=n)
+            similarity = self.text_simularity(ocr_text=ocr_text_trunk, target=target_trunk, min_gap=min_gap, max_gap=max_gap, n=n)
             if similarity > 0.5:
                 id1 = ''.join([i for i in ocr_text[-n:] if i.isdigit()])
                 id2 = ''.join([i for i in target[-n:] if i.isdigit()])
@@ -626,7 +623,11 @@ class NanokaDetector():
                     return 1
             return -1 # 特殊标识一下这不是直接计算出来的值
         
-        sub_strings = self.text_combination(target, max_gap=max_gap, min_gap=min_gap)  # 计算目标文本的所有子串组合
+        sub_strings = self.text_combination(target, min_gap=min_gap, max_gap=max_gap)  # 计算目标文本的所有子串组合
+        if len(sub_strings) == 0:
+            print("Warning: No sub-strings generated, returning direct similarity.")
+            return 1.0 if ocr_text == target else 0.0
+        
         all_matches, z_matches = [], []
         
         # 收集所有匹配子串及其位置
@@ -637,13 +638,18 @@ class NanokaDetector():
                 all_matches.append(sname)
             if bool(re.search(pattern, target)): # Normalization
                 z_matches.append(sname)
-
+                
+                
+        if len(target) == 0:
+            print("Warning: Target text is empty, returning similarity of 0.")
+            return 0.0  # 如果目标文本为空，返回 0 相似度
+        
         similarity = np.sum(np.exp([len(match_string) for match_string in all_matches]))/np.sum(np.exp([len(match_string) for match_string in z_matches]))
         return similarity
     
 if __name__ == '__main__':
     '''首先创建空的分析器, 之后我们慢慢上传图片就可以了'''
-    detector = NanokaDetector()  
+    detector = NanokaDetector(yaml_path=os.path.join("..", "config.yaml"))
     
     # 静态图片测试
     BASE_DIR = os.path.abspath(os.path.join("..", "..", "sky-api", "source", "data"))
@@ -673,6 +679,7 @@ if __name__ == '__main__':
             
             pf = detector.text_detector()
             
+            print(pf)
             # 查找叫罐头的文本在哪
             target = '罐头'
             for i, name in enumerate(pf['result'].values):
@@ -685,7 +692,7 @@ if __name__ == '__main__':
                     print("xywh:", data)
                     x, y, w, h = eval(data)
                     # 绘制矩形框
-                    cv2.rectangle(img, (border_x + x, border_y + y), (border_x + x + w, border_y + y + h), color=(0,255,255), thickness=3)
+                    cv2.rectangle(img, (border_x + x - w//2, border_y + y - h//2), (border_x + x + w//2, border_y + y + h//2), color=(0,255,255), thickness=3)
                     
             fig, axes = plt.subplots(1, 1, figsize=(15,6))
             axes.imshow(img)
