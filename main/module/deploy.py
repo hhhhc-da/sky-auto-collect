@@ -13,10 +13,11 @@ from copy import copy
 from scipy.ndimage import median_filter
 from paddleocr import PaddleOCR
 import yaml
+from ultralytics import YOLO
 
 # 全局配置
 class NanokaDetector():
-    def __init__(self, image=None, circle_radius=20, yaml_path='config.yaml', paddle_ocr_on=False):
+    def __init__(self, image=None, circle_radius=20, yaml_path='config.yaml', paddle_ocr_on=False, yolo_on=False):
         super(NanokaDetector, self).__init__()
 
         if image != None:
@@ -36,6 +37,12 @@ class NanokaDetector():
             self.paddle_ocr = PaddleOCR(lang="ch")
             
         self.yaml_path = yaml_path
+        if yolo_on:
+            model_path = os.path.abspath(os.path.join("..","yolov11","weights","sky.pt"))
+            print("YOLO 模型位置:", model_path)
+            self.yolo_model = YOLO(model_path, verbose=False, device='cpu')
+        else:
+            self.yolo = None
 
     def update_image(self, image=None, yaml_path=None) -> None:
         '''
@@ -625,7 +632,7 @@ class NanokaDetector():
         
         sub_strings = self.text_combination(target, min_gap=min_gap, max_gap=max_gap)  # 计算目标文本的所有子串组合
         if len(sub_strings) == 0:
-            print("Warning: No sub-strings generated, returning direct similarity.")
+            print(r"警告: 未能生成子串（可能因为字串过短），采用直接比较的方式决定相似度 simularity ∈ {0, 1}")
             return 1.0 if ocr_text == target else 0.0
         
         all_matches, z_matches = [], []
@@ -641,11 +648,91 @@ class NanokaDetector():
                 
                 
         if len(target) == 0:
-            print("Warning: Target text is empty, returning similarity of 0.")
+            print("警告: 目标文本为空，直接返回 0% 相似度")
             return 0.0  # 如果目标文本为空，返回 0 相似度
         
         similarity = np.sum(np.exp([len(match_string) for match_string in all_matches]))/np.sum(np.exp([len(match_string) for match_string in z_matches]))
         return similarity
+    
+    def analyze_receive_button_by_sift(self, rgb_image, template_dir=os.path.join("module", "templates")) -> list:
+        '''
+        使用 SIFT 结合模板匹配检测是否存在领取按钮，领取按钮有三种状态对应三个模板
+        模板使用 PS 进行特征提取，通过灰度化、修改色阶等方式获得的纹理特征，整体特征一般
+        '''
+        # 加载三张模板图
+        templates = [cv2.threshold(cv2.cvtColor(cv2.imread(os.path.join(template_dir, f'rt{i+1}.png')), cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1] for i in range(3)]
+
+        target = rgb_image.copy()
+        # print("输入图像大小:", target.shape)
+        target = cv2.resize(target, (1920, 1080))
+        # print("处理图像大小:", target.shape)
+        target_gray = cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)
+
+        sift = cv2.SIFT_create(
+            nfeatures=0,               # 默认0无限制，可能导致计算慢
+            contrastThreshold=0.04,    # 降低对比度阈值，提取更多弱特征（默认0.04）
+            edgeThreshold=10,          # 降低边缘阈值，允许靠近边缘的特征点（默认10）
+            sigma=1.6                  # 高斯模糊系数，控制尺度空间初始层（默认1.6）
+        )
+
+        sift_points = []
+        for step, template in enumerate(templates):
+            mask = np.zeros_like(template)
+            # 提取特征点和描述子
+            contours, _ = cv2.findContours(template, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours) > 0:
+                largest_contour = max(contours, key=cv2.contourArea)
+                cv2.drawContours(mask, [largest_contour], -1, 255, thickness=cv2.FILLED)
+            
+            kp_template, des_template = sift.detectAndCompute(template, mask)
+            kp_target, des_target = sift.detectAndCompute(target_gray, None)
+
+            # 特征匹配与筛选
+            FLANN_INDEX_KDTREE = 1
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=8)
+            search_params = dict(checks=50)
+            flann = cv2.FlannBasedMatcher(index_params, search_params)
+            matches = flann.knnMatch(des_template, des_target, k=2)
+            
+            good_matches = []
+            for m, n in matches:
+                if m.distance < 0.7 * n.distance:
+                    good_matches.append(m)
+            
+            # 几何验证（单应性矩阵 + RANSAC）
+            if len(good_matches) > 3:  # 三个匹配点，只要能计算单应性矩阵应该都能过
+                src_pts = np.float32([kp_template[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                dst_pts = np.float32([kp_target[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                
+                M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                
+                if M is not None:
+                    h, w = template.shape
+                    template_corners = np.float32([[0, 0], [0, h], [w, h], [w, 0]]).reshape(-1, 1, 2)
+                    target_corners = cv2.perspectiveTransform(template_corners, M)
+                    sift_points.append([np.average(target_corners, axis=0)[0].astype(np.uint32).tolist(), step])
+                else:
+                    print("警告：无法计算单应性矩阵，可能是匹配点质量不佳")
+            else:
+                print("警告：匹配点不足，未检测到模板内容")
+                
+        return sift_points
+    
+    def yolov11s_forward(self, rgb_image) -> pd.DataFrame:
+        '''
+        使用 YOLOv11s 模型检测是否检测到人，在实际运行中我们应该检测到两个人起步，我们选择最大的这两个或一个即可
+        在这种情况我们通过使用左右小键盘进行操纵，让我们的摄像机平稳转动
+        '''
+        # 确保模型加载成功
+        if self.yolo_model is None:
+            raise RuntimeError("模型加载失败，请检查路径和文件是否正确。")
+        print("模型加载成功，开始评估...")
+                
+        image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
+        
+        results = self.yolo_model(image, verbose=False)
+        return pd.DataFrame(results[0].boxes.data.cpu().numpy(), columns=['x','y','w','h','conf','cls'])
+
     
 if __name__ == '__main__':
     '''首先创建空的分析器, 之后我们慢慢上传图片就可以了'''

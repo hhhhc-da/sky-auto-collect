@@ -1,6 +1,8 @@
 delay: 600
 episode: 1
 file: E:\pandownload1\ML\links.xlsx
+yolo:
+  model: E:\pandownload1\ML\sky-auto-collect\yolov11\weights\sky.pt
 index: 18
 texts:
 - 挚友

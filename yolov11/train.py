@@ -37,7 +37,7 @@ def train_yolov11n_model(options=None):
         raise FileNotFoundError(f"数据配置文件不存在: {path}")
     
     # 加载预训练模型
-    print("正在加载 YOLOv11 纳米版预训练模型, 模型路径: {}".format(os.path.abspath(weights)))
+    print("正在加载 YOLOv11 预训练模型, 模型路径: {}".format(os.path.abspath(weights)))
     model = YOLO(os.path.abspath(weights))  # 加载 YOLOv11 纳米版预训练模型
     
     # 训练模型

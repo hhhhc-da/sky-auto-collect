@@ -111,6 +111,27 @@ class CrawlerProgramThread(BaseThread):
             return True
         else:
             return False
+        
+    def check_transfer(self) -> bool:
+        '''
+        检测我们是否正确的被传送进房间内，我们可能遇到传送不进去的情况，这种情况我们要反复尝试但是要加一个计时器
+        成功进去返回 True，失败返回 False
+        '''
+        # 检测画面是否为几乎全黑色或几乎全白色
+        s = time.time()
+        
+        while time.time() - s < 600:  # 最多等待十分钟
+            screenshot = pyautogui.screenshot()
+            frame = np.array(screenshot)
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # 计算图像的平均亮度
+            mean_brightness = np.mean(gray_frame)
+            
+            if mean_brightness < 10 or mean_brightness > 245:
+                return True
+            
+        return False  # 超过时间限制仍未检测到有效传送，返回 False
     
     def search_friend_name(self, find_target='', plot=False, show=False) -> None:
         '''
@@ -246,12 +267,85 @@ class CrawlerProgramThread(BaseThread):
         
         # 校验是否存在"屏蔽按钮"（实际上校验红色区域即可），校验方法为十分严格的 RGB 检测
         if not self.check_danger():
-            self.press_key('space', wait_time=0.5)  # 点击进入星盘页
+            # 进入之后只要你不乱动就是没问题的
+            pydirectinput.keyDown('space')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('space')
+            
+            while not self.check_transfer(): # 阻塞校验是否进入
+                pydirectinput.keyDown('space')
+                self.gauss_sleep(0.1)
+                pydirectinput.keyUp('space')
         else:
             self.press_key('esc', wait_time=0.1) # 加入我们点错了, 我们这一步一定不能执行
             raise RuntimeError('检测到有危险行为不能确定, 请立刻查看')
         
-        print("函数未实现, 请重写 goto_meet 函数")
+        # 进来了之后开始寻找周围人，由于进来之后不需要其他操作只需要四处转一圈就可以了
+        for i in range(60): # 左旋寻找目标，是离散的
+            frame = self.screenshot()
+            pf = self.detector.yolov11s_forward(rgb_image=frame)
+            
+            if len(pf['cls'].values) > 0:
+                print("检测到人物出现，已方向确定")
+                
+                # 模糊计算偏移量
+                x, w = pf['x'].values[0], pf['w'].values[0]
+                distance_x = x + w / 2 - self.width / 2  # 计算中心点偏移量
+                
+                '''
+                如何估算这个时间，我们假设 1s 能转 60 度相机
+                使用 y = k * ln(x) 当做我们的拟合函数, 已知x是距离, y是消耗的时间
+                需要估计的参数仅为 k, 用 ln 函数来拟合这个关系是因为 ln(x+1)~x
+                那么我们按照 1/3 屏幕作为 60 度夹角对应的坐标变换量（全是约算没有任何依据）
+                已知转速是已知的，也就是 1s 内转 60 度也就是 640 px
+                带入方程得到 1s 内变化 1 = k * ln(640 + 1)
+                那么我们可以得到 k = 1 / ln(640 + 100) = 0.1514 （本数据未基于统计验证）
+                这一下大概率是会转超了的，然后根据速率做一下归一化 k /= 3
+                '''
+                spin_time = math.log(abs(distance_x) + 100) * 0.0506  # 根据偏移量计算旋转时间
+                
+                print(f"计算出的旋转时间: {spin_time:.2f} 秒")
+                if distance_x > 0:  # 如果偏移量大于 0，说明需要向右转
+                    pydirectinput.keyDown('right')
+                    self.gauss_sleep(spin_time)
+                    pydirectinput.keyUp('right')
+                elif distance_x < 0:  # 如果偏移量小于 0，说明需要向左转
+                    pydirectinput.keyDown('left')
+                    self.gauss_sleep(spin_time)
+                    pydirectinput.keyUp('left')
+                    
+                if i < 5:
+                    self.gauss_sleep(2) # 也别太快了
+                break
+            
+            pydirectinput.keyDown('space')
+            self.gauss_sleep(0.4) # 随机慢速旋转
+            pydirectinput.keyUp('space')
+            
+        # 使用 SIFT 检测是否存在 
+        timeout = 3
+        while timeout > 0:
+            frame = self.screenshot()
+            # sift_matches 匹配结果: [([x, y], cls), ...]
+            sift_matches = self.detector.analyze_receive_button_by_sift(frame)
+            
+            if len(sift_matches) > 0:
+                print("检测到送心员行为，开始接收爱心")
+                
+                self.press_key('f', wait_time=5)
+                self.press_key('f', wait_time=5)
+                
+                pydirectinput.keyDown('down') # 定位回星盘去
+                self.gauss_sleep(2)
+                pydirectinput.keyUp('down')
+                return
+            
+            else:
+                timeout -= 1
+                self.gauss_sleep(3) # 等待约 10s 没有就报错就可以了
+                continue
+        if timeout == 0:
+            raise RuntimeError("无法检测到送心员行为，这是未定义的行为")
     
     def run(self):
         '''
