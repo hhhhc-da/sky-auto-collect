@@ -38,9 +38,14 @@ class NanokaDetector():
             
         self.yaml_path = yaml_path
         if yolo_on:
-            model_path = os.path.abspath(os.path.join("..","yolov11","weights","sky.pt"))
+            data = None
+            with open(self.yaml_path, 'r', encoding='utf-8') as file:
+                data = yaml.safe_load(file)
+                file.close()
+                
+            model_path = data['yolo']['model']
             print("YOLO 模型位置:", model_path)
-            self.yolo_model = YOLO(model_path, verbose=False, device='cpu')
+            self.yolo_model = YOLO(model_path, verbose=False)
         else:
             self.yolo = None
 

@@ -66,7 +66,8 @@ class WebCrawler:
                 self.code = code
             return
             
-        try:
+        if True:
+        # try:
             # 智能生成 User-Agent（基于真实统计数据）
             ua = UserAgent()
             user_agent = ua.chrome  # 固定使用 Chrome 的 UA
@@ -99,14 +100,23 @@ class WebCrawler:
                         pbar.update(1)
                 # 我们只做一次校验, 第二次就不做了
                 pf, _ = self.re_keyword_detector(texts)
+            
+            button_text, timeout = None, 10
+            while timeout > 0:
+                pf, _ = self.re_keyword_detector(texts)
+                if len(pf[pf['取爱心']]['文本'].values) > 0:
+                    button_text = pf[pf['取爱心']]['文本'].values[0]
+                    break
                 
-            button_text = pf[pf['取爱心']]['文本'].values[0]
+                print("没有找到取爱心按钮, 等待 2 秒后重试...")
+                timeout -= 1
+                self.gauss_sleep(2)
             
             heart_button = helium.Button(button_text)
             helium.wait_until(heart_button.exists, timeout_secs=10)
             helium.click(heart_button)
             
-            self.gauss_sleep(2)
+            self.gauss_sleep(5)
             texts = []
             buttons = helium.find_all(helium.S("button"))
             for index, button in enumerate(buttons):
@@ -141,9 +151,9 @@ class WebCrawler:
             
             self.gauss_sleep(5)
             
-        except Exception as e:
-            print(f"捕捉到 Exception: {e}")
-        finally:
+        # except Exception as e:
+        #     print(f"(WEB_CRAWLER) 捕捉到 Exception: {e}")
+        # finally:
             if self.browser_started:
                 helium.kill_browser()
                 self.browser_started = False

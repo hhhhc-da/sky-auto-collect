@@ -14,7 +14,7 @@ pydirectinput.FAILSAFE = False
 
 import numpy as np
 import matplotlib.pyplot as plt
-import random
+import pyperclip
 import pandas as pd
 import yaml
 from tqdm import tqdm
@@ -33,7 +33,7 @@ class CrawlerProgramThread(BaseThread):
         self.sigma = sigma
         self.yaml_path = yaml
         
-        self.detector = NanokaDetector(yaml_path=self.yaml_path, paddle_ocr_on=True)
+        self.detector = NanokaDetector(yaml_path=self.yaml_path, paddle_ocr_on=True, yolo_on=True)
         self.crawler = WebCrawler()
         
     def goto_page(self, page=0) -> bool:
@@ -132,6 +132,55 @@ class CrawlerProgramThread(BaseThread):
                 return True
             
         return False  # 超过时间限制仍未检测到有效传送，返回 False
+    
+    def add_friend(self, friend_code='', friend_name='') -> None:
+        '''
+        使用好友码加好友，加完好友之后就可以寻找对应位置了
+        '''
+        self.press_key(key='esc', wait_time=3)
+        
+        for _ in range(8):
+            self.press_key('left', wait_time=0.1)  # 向左移到最左边选框
+        for _ in range(3):
+            self.press_key('right', wait_time=0.1)
+            
+        self.press_key('space', wait_time=1)  # 进入好友码添加好友页
+        
+        # 直接将好友码放入复制缓冲区内
+        pyperclip.copy(friend_code)
+        self.gauss_sleep(0.3)
+        pydirectinput.keyDown('ctrl')  # 粘贴好友码
+        pydirectinput.keyDown('v')
+        self.gauss_sleep(0.1)
+        pydirectinput.keyUp('v')
+        pydirectinput.keyUp('ctrl')
+        self.gauss_sleep(0.5)  # 等待粘贴完成
+        
+        # 按下回车键确认
+        self.press_key('enter', wait_time=1)
+        
+        # 这是一组好友码
+        self.press_key('down', wait_time=0.2)
+        self.press_key('right', wait_time=0.2)
+        self.press_key('space', wait_time=1)  # 确认添加好友
+        
+        pyperclip.copy(friend_name)
+        self.gauss_sleep(0.3)
+        pydirectinput.keyDown('ctrl')  # 粘贴好友码
+        pydirectinput.keyDown('v')
+        self.gauss_sleep(0.1)
+        pydirectinput.keyUp('v')
+        pydirectinput.keyUp('ctrl')
+        self.gauss_sleep(0.5)  # 等待粘贴完成
+        self.gauss_sleep(1)
+        
+        # 按下回车键确认添加好友
+        self.press_key('enter', wait_time=1)
+        
+        # 恭喜你有了新的朋友
+        self.press_key('down', wait_time=0.2)
+        self.press_key('right', wait_time=0.2)
+        self.press_key('space', wait_time=1)  # 退出添加好友页        
     
     def search_friend_name(self, find_target='', plot=False, show=False) -> None:
         '''
@@ -364,10 +413,12 @@ class CrawlerProgramThread(BaseThread):
             print(f"第 {epoch + 1} 轮取心")
             for index, row in pf.iterrows():
                 target_url = row['url']
-                crawler.crawl_main(target_url, valid=True)
+                crawler.crawl_main(target_url, headless=False, valid=True) # 记得一定要关闭验证模式
                 
                 if crawler.code is not None:
                     print(f"识别到好友码: {crawler.code}")
+                    
+                    # crawler.code = '3ZCK-F2F8-5121'
                     
                     friend_name = "AAA送心员{}".format(data['index'])
                     print(pd.DataFrame([[friend_name, crawler.code]], columns=['name', 'code']))
@@ -377,7 +428,10 @@ class CrawlerProgramThread(BaseThread):
                         yaml.dump(data, file, allow_unicode=True, sort_keys=True)
                         file.close()
                         
-                    self.search_friend_name(find_target="小夜-固玩-不许乐")
+                    # self.add_friend(friend_code=crawler.code, friend_name=friend_name)
+                    print(f"添加好友 {friend_name} 成功")
+                        
+                    self.search_friend_name(find_target=friend_name)
                         
                 time.sleep(3)
                 
