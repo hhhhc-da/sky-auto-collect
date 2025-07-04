@@ -106,6 +106,20 @@ texts:
 
 有进度条不用担心卡死，其实是为了等待取心网页的后端服务器，根据自己的需求灵活调整
 
+YOLOv11 的模型训练结果如下：
+
+```
+YOLO11s summary (fused): 100 layers, 9,413,187 parameters, 0 gradients, 21.3 GFLOPs
+                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100%|██████████| 1/1 [00:00<00:00,  5.20it/s]
+                   all         13         25      0.973       0.84      0.908      0.541
+Speed: 0.3ms preprocess, 8.0ms inference, 0.0ms loss, 1.8ms postprocess per image
+Results saved to sky_detection\yolo11n_sky
+```
+
+![image](./images/sky.png)
+
+应该还能用吧...我到时候验证一下
+
 ### __自动游走跑图__
 
 使用目标检测算法确定物体位置并使用强化学习算法控制任务游走

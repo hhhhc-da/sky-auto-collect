@@ -96,15 +96,28 @@ class CrawlerProgramThread(BaseThread):
             
         return code
     
+    def check_danger(self) -> bool:
+        '''
+        检查是否存在危险按钮，这里主要是检测红色区域 (255,63,52) 附近，一般红色是满的 255
+        '''
+        screenshot = pyautogui.screenshot()
+        frame = np.array(screenshot)
+        
+        # 检测红色区域
+        red_mask = cv2.inRange(frame, (250,58,48), (255,65,55))
+        red_area = cv2.countNonZero(red_mask)
+        
+        if red_area > 50: # 超过 50 个经典像素点就不行
+            return True
+        else:
+            return False
+    
     def search_friend_name(self, find_target='', plot=False, show=False) -> None:
         '''
         寻找对应名字的好友的星星位置, 这里就开始操控了
         '''
         # 首先对准星盘使用, 按下 g 进入星盘页
-        pydirectinput.keyDown('g')
-        self.gauss_sleep(0.6)
-        pydirectinput.keyUp('g')
-        self.gauss_sleep(4)
+        self.press_key(key='g', wait_time=4)
         
         self.page = 0
         # 首先我们先把星盘定位到添加好友
@@ -123,15 +136,14 @@ class CrawlerProgramThread(BaseThread):
                 print("检测到添加好友页，退出程序")
                 break
             
-            if True:
-            # try:
+            try:
                 # 开始解析需要传送的好友信息
                 pf = self.detector.text_detector()
                 
                 target, star_pos, text_info = find_target, None, []
                 for i, name in enumerate(pf['result'].values):
                     similarity = self.detector.text_simularity(ocr_text=name, target=target, min_gap=0, max_gap=3)
-                    # print(f"Text: {name}, Similarity to '{target}': {similarity:.2f}")
+                    print(f"Text: {name}, Similarity to '{target}': {similarity:.2f}")
                     
                     if similarity > 0.95: # 高于这个阈值的都被拿出来考量一下
                         xywh = eval(pf[pf['result'] == name]['position'].values[0]) # xywh
@@ -165,7 +177,6 @@ class CrawlerProgramThread(BaseThread):
                 points = []
                 for dp in [dc["hearts_info"], dc["pre_points"], dc["post_points"]]:
                     points.extend(dp)
-                print(pd.DataFrame(points, columns=['x', 'y', 'w', 'h'])) # 请记住，这两个使用的都是中心点
                 
                 closest_star_pos, text_pos = None, None
                 min_distance = float('inf')
@@ -195,35 +206,25 @@ class CrawlerProgramThread(BaseThread):
                         self.goto_meet(text_pos=text_pos, star_pos=closest_star_pos)
                         return 
                 
-            # except Exception as e:
-            #     print(f"捕捉到 Exception: {e}")
-            #     continue
+            except Exception as e:
+                print(f"捕捉到 Exception: {e}")
+                continue
              
     
     def goto_meet(self, text_pos=None, star_pos=None) -> None:
         '''
         传送到对应房间并接收爱心
-        '''
-        pyautogui.moveTo(star_pos)
-        self.gauss_sleep(0.5)  # 等待鼠标移动完成
-        
+        '''        
         timeout = 3
         while timeout > 0:
             if self.check_text(): # 我们现在应该在星盘页才对
-                pyautogui.moveTo(int(x*self.width//1920), int(y*self.height//1080)) 
-                self.gauss_sleep(0.1)
-                pydirectinput.click()  # 点击目标，没送心火的话进入到了送心的人的星盘页
-                self.gauss_sleep(2)
+                self.move_mouse(x=star_pos[0], y=star_pos[1], wait_time=2)  # 移动鼠标到目标中心, 考虑了屏幕分辨率的影响
                 break
             else:
                 print("检测到我们不在星盘页需要重新定位") # 由于是自动程序控制所以不用担心在这里卡死
                 timeout -= 1
                 
-                pydirectinput.keyDown('g')
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('g')
-                self.gauss_sleep(2)
-                
+                self.press_key('g', wait_time=2)
                 self.goto_page(self.page)
                 continue
         if timeout == 0:
@@ -232,32 +233,23 @@ class CrawlerProgramThread(BaseThread):
         # 这里有一个分歧, 如果检测出来没有文字了那么我们就不再点一次了
         if self.check_text():
             pydirectinput.click()  # 点击目标， 这次一定进入大屏星盘页
-            self.gauss_sleep(2)
+            self.gauss_sleep(3)
         
-        for _ in range(5):
-            pydirectinput.keyDown('up')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('up')
-            self.gauss_sleep(0.3)
-            
-        for _ in range(2):
-            pydirectinput.keyDown('down')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('down')
-            self.gauss_sleep(0.1)
-            
+        for _ in range(6):
+            self.press_key('up', wait_time=0.1)
+        for _ in range(3):
+            self.press_key('down', wait_time=0.1)
         self.gauss_sleep(0.4)  # 等待响应
             
         # 如果这里意外颠倒了其他按钮, 尤其是删除或拉黑好友, 我们要做出应急响应
-        pydirectinput.keyDown('space')
-        self.gauss_sleep(0.1)
-        pydirectinput.keyUp('space')
-        self.gauss_sleep(0.5)
+        self.press_key('space', wait_time=2)
         
-        # 加入我们点错了, 我们这一步不能回到星盘页
-        pydirectinput.keyDown('esc')
-        self.gauss_sleep(0.1)
-        pydirectinput.keyUp('esc')
+        # 校验是否存在"屏蔽按钮"（实际上校验红色区域即可），校验方法为十分严格的 RGB 检测
+        if not self.check_danger():
+            self.press_key('space', wait_time=0.5)  # 点击进入星盘页
+        else:
+            self.press_key('esc', wait_time=0.1) # 加入我们点错了, 我们这一步一定不能执行
+            raise RuntimeError('检测到有危险行为不能确定, 请立刻查看')
         
         print("函数未实现, 请重写 goto_meet 函数")
     
@@ -349,10 +341,7 @@ class HeartProgramThread(BaseThread):
                 timeout -= 1
                 
                 # 不停向左检测图片
-                pydirectinput.keyDown('z')
-                self.gauss_sleep(0.6)
-                pydirectinput.keyUp('z')
-                self.gauss_sleep(1.2)
+                self.last_page()
                 continue
             
             break
@@ -363,10 +352,7 @@ class HeartProgramThread(BaseThread):
 
         # 跳转到指定页面
         for _ in range(page):
-            pydirectinput.keyDown('c')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('c')
-            self.gauss_sleep(0.3)
+            self.faster_next_page()
         
         return True
         
@@ -394,9 +380,7 @@ class HeartProgramThread(BaseThread):
             
         if pdata['code'] == 1:
             print("检测到添加好友页，退出程序")
-            pydirectinput.keyDown('esc')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('esc')
+            self.press_key('esc', wait_time=0.1)
             return True, None, None
             
         if img is not None:
@@ -417,20 +401,13 @@ class HeartProgramThread(BaseThread):
             timeout = 3
             while timeout > 0:
                 if self.check_text(): # 我们现在应该在星盘页才对
-                    pyautogui.moveTo(int(x*self.width//1920), int(y*self.height//1080)) 
-                    self.gauss_sleep(0.1)
-                    pydirectinput.click()  # 点击目标，没送心火的话进入到了送心的人的星盘页
-                    self.gauss_sleep(2)
+                    self.move_mouse(x=x, y=y, wait_time=2)  # 移动鼠标到目标中心
                     break
                 else:
                     print("检测到我们不在星盘页需要重新定位") # 由于是自动程序控制所以不用担心在这里卡死
                     timeout -= 1
                     
-                    pydirectinput.keyDown('g')
-                    self.gauss_sleep(0.1)
-                    pydirectinput.keyUp('g')
-                    self.gauss_sleep(2)
-                    
+                    self.press_key('g', wait_time=2)  # 按下 g 键回到星盘页
                     self.goto_page(self.page)
                     continue
             if timeout == 0:
@@ -441,40 +418,24 @@ class HeartProgramThread(BaseThread):
                 pydirectinput.click()  # 点击目标， 这次一定进入大屏星盘页
                 self.gauss_sleep(2)
             
-            for _ in range(5):
-                pydirectinput.keyDown('up')
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('up')
-                self.gauss_sleep(0.3)
-                
+            for _ in range(6):
+                self.press_key('up', wait_time=0.3)  # 向上移动 6 次
             for _ in range(2):
-                pydirectinput.keyDown('down')
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('down')
-                self.gauss_sleep(0.1)
-                
+                self.press_key('down', wait_time=0.2)  # 向下移动 2 次
             self.gauss_sleep(0.4)  # 等待响应
                 
             # 如果这里意外颠倒了其他按钮, 尤其是删除或拉黑好友, 我们要做出应急响应
-            pydirectinput.keyDown('space')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('space')
-            self.gauss_sleep(0.5)
+            self.press_key('space', wait_time=0.5) 
             
             # 加入我们点错了, 我们这一步不能回到星盘页
-            pydirectinput.keyDown('esc')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('esc')
+            self.press_key('esc', wait_time=0.1)
             
             wait_responce_sec = 2.0
             self.gauss_sleep(wait_responce_sec) # 等待页面加载完成, 这一步一定要等待充分
             
             if not self.check_text():
                 print("检测到我们没回到星盘, 存在按钮误操作的可能性, 进行应急处理")
-                pydirectinput.keyDown('esc') # 这次肯定回到星盘了
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('esc')
-                self.gauss_sleep(wait_responce_sec)
+                self.press_key('esc', wait_time=wait_responce_sec)
                 
     def receive_stars(self, post_points, labels) -> None:
         '''
@@ -487,20 +448,13 @@ class HeartProgramThread(BaseThread):
                 timeout = 3
                 while timeout > 0:
                     if self.check_text(): # 我们现在应该在星盘页才对
-                        pyautogui.moveTo(int(x*self.width//1920), int(y*self.height//1080)) 
-                        self.gauss_sleep(0.1)
-                        pydirectinput.click()  # 点击目标，没送心火的话进入到了送心的人的星盘页
-                        self.gauss_sleep(0.8)
+                        self.move_mouse(x=x, y=y, wait_time=0.8) # 进入到了详情页
                         break
                     else:
                         print("检测到我们不在星盘页需要重新定位") # 由于是自动程序控制所以不用担心在这里卡死
                         timeout -= 1
                         
-                        pydirectinput.keyDown('g')
-                        self.gauss_sleep(0.1)
-                        pydirectinput.keyUp('g')
-                        self.gauss_sleep(2)
-                        
+                        self.press_key('g', wait_time=2)  # 按下 g 键回到星盘页
                         self.goto_page(self.page)
                         continue
                 if timeout == 0:
@@ -508,19 +462,10 @@ class HeartProgramThread(BaseThread):
                 
                 # 第二轮判断, 如果进去了就出来
                 if not self.check_text(): # 我们现在应该在星盘页才对, 如果不在那就是在详情页里, 那我们就回退
-                    pyautogui.moveTo(2*self.width//10, self.height//2) # 通过鼠标点击的方式更安全
-                    self.gauss_sleep(0.5)
-                    pydirectinput.click()
-                    self.gauss_sleep(0.8)
-                
+                    self.press_key('esc', wait_time=0.8)
                 if not self.check_text():
-                    pydirectinput.keyDown('g') # 如果还没有的话那就只能是卡退了, 按 g 回去并且恢复页面
-                    self.gauss_sleep(0.1)
-                    pydirectinput.keyUp('g')
-                    self.gauss_sleep(2.5)
-                    
+                    self.press_key('g', wait_time=2.5)
                     self.goto_page(self.page)  # 恢复到当前页
-                    
                 if not self.check_page():
                     raise RuntimeError("无法定位到星盘页，请检查程序运行状态")
     
@@ -534,56 +479,30 @@ class HeartProgramThread(BaseThread):
             timeout = 3
             while timeout > 0:
                 if self.check_text(): # 我们现在应该在星盘页才对
-                    pyautogui.moveTo(int(x*self.width//1920), int(y*self.height//1080)) 
-                    self.gauss_sleep(0.1)
-                    pydirectinput.keyDown('space') # 点击目标，没送心火的话进入到了送心的人的星盘页
-                    self.gauss_sleep(0.1)
-                    pydirectinput.keyUp('space')
-                    self.gauss_sleep(1.5)
+                    self.move_mouse(x=x, y=y, wait_time=1.5)  # 移动鼠标到目标中心, 考虑了屏幕分辨率的影响
                     break
                 else:
                     print("检测到我们不在星盘页需要重新定位") # 由于是自动程序控制所以不用担心在这里卡死
                     timeout -= 1
                     
-                    pydirectinput.keyDown('g')
-                    self.gauss_sleep(0.1)
-                    pydirectinput.keyUp('g')
-                    self.gauss_sleep(2)
-                    
+                    self.press_key('g', wait_time=2)  # 按下 g 键回到星盘页
                     self.goto_page(self.page)
                     continue
             if timeout == 0:
                 raise RuntimeError("无法定位到星盘页，请检查程序运行状态")
             
-            if self.check_text():
-                # print("检测没有进入星盘页, 需要重新点击")
-                pydirectinput.keyDown('space') # 这都进不去鉴定为识别错了
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('space')
-                self.gauss_sleep(1.5)
-                
-                
+            if self.check_text(): # 没进去再点一下
+                self.press_key('space', wait_time=1.5)
             if not self.check_text(): 
-                pydirectinput.keyDown('f')
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('f')
-                self.gauss_sleep(0.5)
-                
-                pydirectinput.keyDown('esc')
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('esc')
-                self.gauss_sleep(1.2)
-            
+                self.press_key('f', wait_time=0.5)
+                self.press_key('esc', wait_time=0.5)
     
     def run(self):
         '''
         赠送心火主线程，用来从行为上控制程序
         '''
         # 首先对准星盘使用, 按下 g 进入星盘页
-        pydirectinput.keyDown('g')
-        self.gauss_sleep(0.6)
-        pydirectinput.keyUp('g')
-        self.gauss_sleep(4)
+        self.press_key('g', wait_time=4)
         
         self.page = 0
         # 首先我们先把星盘定位到添加好友

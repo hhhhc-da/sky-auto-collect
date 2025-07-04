@@ -176,10 +176,10 @@ cython_debug/
 wandb/
 *.pt
 *pth
-yolov11/dataset/candle_only/
-yolov11/dataset/sky/
+yolov11/dataset/sky_human_v2/
 data/diff/
 data/source/frames/
+data/dataset/
 
 *.mp4
 

@@ -75,4 +75,4 @@ if __name__ == "__main__":
             print(f"源文件夹 {source_folder} 不存在，跳过。")
             continue
         
-        select_frames(source_folder, output_folder, threshold=0.8)
+        select_frames(source_folder, output_folder, threshold=0.4)

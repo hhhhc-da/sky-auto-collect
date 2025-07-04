@@ -26,27 +26,53 @@ class BaseThread(QThread):
         self.page = 0
 
     def gauss_sleep(self, seconds:float=0.6, min_seconds:float=0.1) -> None:
-        """暂停指定的秒数"""
+        '''
+        暂停指定的秒数
+        '''
         time.sleep(max(min_seconds, random.gauss(seconds, self.sigma)))
         
     def mouse_clear(self) -> None:
-        """清除鼠标位置"""
+        '''
+        清除鼠标位置
+        '''
         pyautogui.moveTo(1, 1)
         self.gauss_sleep(0.5)
         
     def screenshot(self) -> np.ndarray:
-        """获取当前屏幕截图"""
+        '''
+        获取当前屏幕截图
+        '''
         screenshot = pyautogui.screenshot()
         frame = np.array(screenshot)
         return frame
     
     def check_text(self) -> bool:
-        """检测左下角是否存在我们期待的文字, 如果有返回 True, 否则返回 False"""
+        '''
+        检测左下角是否存在我们期待的文字, 如果有返回 True, 否则返回 False
+        '''
         frame = self.screenshot()
         gray = cv2.cvtColor(cv2.resize(frame, (1920, 1080)), cv2.COLOR_RGB2GRAY)
         text = self.detector.ocr_detector(gray=gray)
         pf = self.detector.re_keyword_detector([text])
         return bool(pf['星盘页'].values[0])
+    
+    def press_key(self, key="esc", wait_time=0.6):
+        '''
+        按下键盘并且等待一段时间
+        '''
+        pydirectinput.keyDown(key)
+        self.gauss_sleep(0.1)
+        pydirectinput.keyUp(key)
+        self.gauss_sleep(wait_time)
+        
+    def move_mouse(self, x:int=0, y:int=0, wait_time:float=2) -> None:
+        '''
+        移动鼠标到指定位置
+        '''
+        pyautogui.moveTo(int(x*self.width//1920), int(y*self.height//1080)) 
+        self.gauss_sleep(0.5)
+        self.press_key('space', wait_time=0.1)
+        self.gauss_sleep(wait_time)
 
     # virtual 虚函数
     def goto_page(self, page=0):
