@@ -45,9 +45,27 @@ class NanokaDetector():
                 
             model_path = data['yolo']['model']
             print("YOLO 模型位置:", model_path)
-            self.yolo_model = YOLO(model_path, verbose=False)
+            self.yolo_model = YOLO(model_path)
+            
+            # 转换为 CPU 推理模型
+            self.yolo_model = self.yolo_model.to('cpu')
         else:
             self.yolo = None
+            
+        # 汉字映射表用于控制 OCR 减少误识别
+        self.chinese_map = {
+            1: '壹',
+            2: '贰',
+            3: '叁',
+            4: '肆',
+            5: '伍',
+            6: '陆',
+            7: '柒',
+            8: '捌',
+            9: '玖',
+            0: '零'
+        }
+        self.chinese_map_reverse = {v: k for k, v in self.chinese_map.items()}
 
     def update_image(self, image=None, yaml_path=None) -> None:
         '''
@@ -628,8 +646,8 @@ class NanokaDetector():
             
             similarity = self.text_simularity(ocr_text=ocr_text_trunk, target=target_trunk, min_gap=min_gap, max_gap=max_gap, n=n)
             if similarity > 0.5:
-                id1 = ''.join([i for i in ocr_text[-n:] if i.isdigit()])
-                id2 = ''.join([i for i in target[-n:] if i.isdigit()])
+                id1 = ''.join([i for i in ocr_text[-n:] if i in self.chinese_map.keys()])  # 只保留中文数字字符
+                id2 = ''.join([i for i in target[-n:] if i in self.chinese_map.keys()])
                 
                 if id1 == id2: # 增强鲁棒性不用转换
                     return 1
@@ -723,10 +741,11 @@ class NanokaDetector():
                 
         return sift_points
     
-    def yolov11s_forward(self, rgb_image) -> pd.DataFrame:
+    def yolov11s_botsort_track(self, rgb_image) -> dict:
         '''
         使用 YOLOv11s 模型检测是否检测到人，在实际运行中我们应该检测到两个人起步，我们选择最大的这两个或一个即可
         在这种情况我们通过使用左右小键盘进行操纵，让我们的摄像机平稳转动
+        使用 BoT-SORT 进行目标跟踪，速度和精度完全没有问题， 因为假设了我们是主动传进来的，不会有好友干扰，也不用费劲做 OCR
         '''
         # 确保模型加载成功
         if self.yolo_model is None:
@@ -735,8 +754,14 @@ class NanokaDetector():
                 
         image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
         
-        results = self.yolo_model(image, verbose=False)
-        return pd.DataFrame(results[0].boxes.data.cpu().numpy(), columns=['x','y','w','h','conf','cls'])
+        result = self.yolo_model.track(image, tracker="bytetrack.yaml", verbose=False)[0].boxes
+        
+        return {
+            'id': result.id,
+            'xywh': result.xywh,
+            'cls': result.cls,
+            'conf': result.conf
+        }
 
     
 if __name__ == '__main__':

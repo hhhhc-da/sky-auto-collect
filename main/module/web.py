@@ -66,8 +66,7 @@ class WebCrawler:
                 self.code = code
             return
             
-        if True:
-        # try:
+        try:
             # 智能生成 User-Agent（基于真实统计数据）
             ua = UserAgent()
             user_agent = ua.chrome  # 固定使用 Chrome 的 UA
@@ -94,43 +93,61 @@ class WebCrawler:
             pf, wait_time = self.re_keyword_detector(texts)
             if wait_time > 0:
                 print(f"识别到等待时间: {wait_time} 秒")
-                with tqdm(total=wait_time+5, desc=f"等待", unit='s') as pbar:
+                with tqdm(total=wait_time+5, desc=f"等待", unit='s') as pbar: # 正宗延时等待
                     for _ in range(wait_time+5):
                         time.sleep(1)
                         pbar.update(1)
-                # 我们只做一次校验, 第二次就不做了
-                pf, _ = self.re_keyword_detector(texts)
-            
-            button_text, timeout = None, 10
-            while timeout > 0:
-                pf, _ = self.re_keyword_detector(texts)
-                if len(pf[pf['取爱心']]['文本'].values) > 0:
-                    button_text = pf[pf['取爱心']]['文本'].values[0]
-                    break
                 
-                print("没有找到取爱心按钮, 等待 2 秒后重试...")
-                timeout -= 1
-                self.gauss_sleep(2)
+                timeout = 30
+                while True:
+                    pf, _ = self.re_keyword_detector(texts)
+                    if len(pf[pf['取爱心']]['文本'].values) > 0:
+                        button_text = pf[pf['取爱心']]['文本'].values[0]
+                        print("识别到取爱心按钮: {}".format(button_text))
+                        break
+                    else:
+                        print("没有找到取爱心按钮, 1s 秒后重试...")
+                        timeout -= 1
+                        self.gauss_sleep(1)
             
-            heart_button = helium.Button(button_text)
-            helium.wait_until(heart_button.exists, timeout_secs=10)
-            helium.click(heart_button)
-            
-            self.gauss_sleep(5)
-            texts = []
-            buttons = helium.find_all(helium.S("button"))
-            for index, button in enumerate(buttons):
-                texts.append(button.web_element.text)
-            pf, _ = self.re_keyword_detector(texts)
+            while True: # 如果繁忙那我们就一直扫就可以了，反正别的链接也会是繁忙的
+                button_text, timeout = None, 10
+                while timeout > 0:
+                    pf, _ = self.re_keyword_detector(texts)
+                    if len(pf[pf['取爱心']]['文本'].values) > 0:
+                        button_text = pf[pf['取爱心']]['文本'].values[0]
+                        break
+                    
+                    print("没有找到取爱心按钮, 等待 2 秒后重试...")
+                    timeout -= 1
+                    self.gauss_sleep(2)
                 
-            # 双重验证, 如果出现这个或者没有出现确定那么我们就这样处理
-            if helium.Text("今日取心已到上限了,请明天再来哦！").exists() or len(pf[pf['确定']]['文本'].values) == 0:
-                raise Exception("本链接已经达到上限")
+                heart_button = helium.Button(button_text)
+                helium.wait_until(heart_button.exists, timeout_secs=10)
+                helium.click(heart_button)
+                
+                self.gauss_sleep(5)
+                texts = []
+                buttons = helium.find_all(helium.S("button"))
+                for index, button in enumerate(buttons):
+                    texts.append(button.web_element.text)
+                pf, _ = self.re_keyword_detector(texts)
+                    
+                # 双重验证, 如果出现这个或者没有出现确定那么我们就这样处理
+                if helium.Text("今日取心已到上限了,请明天再来哦！").exists() or len(pf[pf['确定']]['文本'].values) == 0:
+                    raise Exception("本链接已经达到上限")
+                if helium.Text("送心员繁忙！").exists() or len(pf[pf['确定']]['文本'].values) == 0:
+                    print("送心员繁忙, 请稍后再试...")
+                    self.gauss_sleep(10)
+                    continue
             
-            ok_text = pf[pf['确定']]['文本'].values[0]
-            ok_button = helium.Button(ok_text)
-            helium.wait_until(ok_button.exists, timeout_secs=10)
-            helium.click(ok_button)
+                ok_text = pf[pf['确定']]['文本'].values[0]
+                ok_button = helium.Button(ok_text)
+                helium.wait_until(ok_button.exists, timeout_secs=10)
+                helium.click(ok_button)
+                break
+            
+            self.gauss_sleep(3)
             
             texts = []
             buttons = helium.find_all(helium.S("button"))
@@ -151,9 +168,9 @@ class WebCrawler:
             
             self.gauss_sleep(5)
             
-        # except Exception as e:
-        #     print(f"(WEB_CRAWLER) 捕捉到 Exception: {e}")
-        # finally:
+        except Exception as e:
+            print(f"(WEB_CRAWLER) 捕捉到 Exception: {e}")
+        finally:
             if self.browser_started:
                 helium.kill_browser()
                 self.browser_started = False

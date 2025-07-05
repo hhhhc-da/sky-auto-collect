@@ -123,3 +123,11 @@ class BaseThread(QThread):
         self.gauss_sleep(0.6)
         pydirectinput.keyUp('z')
         self.gauss_sleep(1.2)
+
+    def search_star_board(self) -> None:
+        '''
+        定位到星盘页，只要我们低头就一定能看到星盘页
+        '''
+        pydirectinput.keyDown('down')
+        self.gauss_sleep(3)
+        pydirectinput.keyUp('down')

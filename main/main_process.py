@@ -120,7 +120,36 @@ class CrawlerProgramThread(BaseThread):
         # 检测画面是否为几乎全黑色或几乎全白色
         s = time.time()
         
-        while time.time() - s < 600:  # 最多等待十分钟
+        while time.time() - s < 2:  # 最多等待十秒钟
+            screenshot = pyautogui.screenshot()
+            frame = np.array(screenshot)
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # 计算图像的平均亮度
+            mean_brightness = np.mean(gray_frame)
+            
+            if mean_brightness < 10 or mean_brightness > 245:
+                return True
+            
+        screenshot = pyautogui.screenshot()
+        frame = np.array(screenshot)
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # 两秒的时候截取最下面是否存在 "您的朋友就在您身边"
+        boarder_height = gray_frame.shape[0] * 0.1 # 最下面 10% 的区域
+        text_area = gray_frame[-boarder_height:, :]
+        
+        # 检测是否存在 "您的朋友就在您身边" 的提示
+        paddle_ocr_result = self.detector.paddle_ocr.predict([text_area])
+        text = ''
+        if (paddle_ocr_result is not None) and (len(paddle_ocr_result) > 0):
+            text = ''.join(paddle_ocr_result[0]['rec_texts'])
+        
+        if '朋友' in text or '身边' in text:
+            print("检测到已传送成功，您的朋友就在您身边")
+            return True
+            
+        while time.time() - s < 10:  # 最多等待十秒钟
             screenshot = pyautogui.screenshot()
             frame = np.array(screenshot)
             gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -140,9 +169,18 @@ class CrawlerProgramThread(BaseThread):
         self.press_key(key='esc', wait_time=3)
         
         for _ in range(8):
-            self.press_key('left', wait_time=0.1)  # 向左移到最左边选框
+            pydirectinput.keyDown('left')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('left')
+            self.gauss_sleep(0.1)  # 向左移到最左边选框
+            
+        self.gauss_sleep(0.3)
+        
         for _ in range(3):
-            self.press_key('right', wait_time=0.1)
+            pydirectinput.keyDown('right')
+            self.gauss_sleep(0.1)
+            pydirectinput.keyUp('right')
+            self.gauss_sleep(0.1)
             
         self.press_key('space', wait_time=1)  # 进入好友码添加好友页
         
@@ -159,7 +197,7 @@ class CrawlerProgramThread(BaseThread):
         # 按下回车键确认
         self.press_key('enter', wait_time=1)
         
-        # 这是一组好友码
+        # 这是一组好友邀请编号！（右下角接受）
         self.press_key('down', wait_time=0.2)
         self.press_key('right', wait_time=0.2)
         self.press_key('space', wait_time=1)  # 确认添加好友
@@ -172,21 +210,20 @@ class CrawlerProgramThread(BaseThread):
         pydirectinput.keyUp('v')
         pydirectinput.keyUp('ctrl')
         self.gauss_sleep(0.5)  # 等待粘贴完成
-        self.gauss_sleep(1)
         
         # 按下回车键确认添加好友
         self.press_key('enter', wait_time=1)
         
         # 恭喜你有了新的朋友
         self.press_key('down', wait_time=0.2)
-        self.press_key('right', wait_time=0.2)
-        self.press_key('space', wait_time=1)  # 退出添加好友页        
+        self.press_key('space', wait_time=1)  # 退出添加好友页
     
     def search_friend_name(self, find_target='', plot=False, show=False) -> None:
         '''
         寻找对应名字的好友的星星位置, 这里就开始操控了
         '''
         # 首先对准星盘使用, 按下 g 进入星盘页
+        self.search_star_board()
         self.press_key(key='g', wait_time=4)
         
         self.page = 0
@@ -273,15 +310,15 @@ class CrawlerProgramThread(BaseThread):
                         print(f"找到好友 {name} 的星星位置: {closest_star_pos}, 文本相似度: {similarity:.2f}, 距离: {min_distance:.2f}")
                 
                         # 找到点了之后开始移动即可
-                        self.goto_meet(text_pos=text_pos, star_pos=closest_star_pos)
+                        self.goto_meet(star_pos=closest_star_pos)
                         return 
                 
             except Exception as e:
                 print(f"捕捉到 Exception: {e}")
-                continue
+                break
              
     
-    def goto_meet(self, text_pos=None, star_pos=None) -> None:
+    def goto_meet(self, star_pos=None) -> None:
         '''
         传送到对应房间并接收爱心
         '''        
@@ -305,10 +342,20 @@ class CrawlerProgramThread(BaseThread):
             pydirectinput.click()  # 点击目标， 这次一定进入大屏星盘页
             self.gauss_sleep(3)
         
-        for _ in range(6):
-            self.press_key('up', wait_time=0.1)
+        for _ in range(8):
+            pydirectinput.keyDown('up')
+            time.sleep(0.12)
+            pydirectinput.keyUp('up')
+            self.gauss_sleep(0.2)  # 向上移动 8 次
+            
+        self.gauss_sleep(0.4)
+        
         for _ in range(3):
-            self.press_key('down', wait_time=0.1)
+            pydirectinput.keyDown('down')
+            time.sleep(0.12)
+            pydirectinput.keyUp('down')
+            self.gauss_sleep(0.2)  # 向上移动 8 次
+            
         self.gauss_sleep(0.4)  # 等待响应
             
         # 如果这里意外颠倒了其他按钮, 尤其是删除或拉黑好友, 我们要做出应急响应
@@ -317,41 +364,59 @@ class CrawlerProgramThread(BaseThread):
         # 校验是否存在"屏蔽按钮"（实际上校验红色区域即可），校验方法为十分严格的 RGB 检测
         if not self.check_danger():
             # 进入之后只要你不乱动就是没问题的
-            pydirectinput.keyDown('space')
-            self.gauss_sleep(0.1)
-            pydirectinput.keyUp('space')
+            self.press_key('space', wait_time=0.1) # 进入房间
             
-            while not self.check_transfer(): # 阻塞校验是否进入
-                pydirectinput.keyDown('space')
-                self.gauss_sleep(0.1)
-                pydirectinput.keyUp('space')
+            s = time.time()
+            while not self.check_transfer() and time.time() - s < 600: # 阻塞校验是否进入, 最多循环检测十分钟
+                self.press_key('space', wait_time=0.1)
+                
+            if time.time() - s >= 600:
+                raise RuntimeError("传送异常，可能是传送失败或未进入房间，请检查程序运行状态")
         else:
             self.press_key('esc', wait_time=0.1) # 加入我们点错了, 我们这一步一定不能执行
             raise RuntimeError('检测到有危险行为不能确定, 请立刻查看')
         
+        self.gauss_sleep(3)
+        
         # 进来了之后开始寻找周围人，由于进来之后不需要其他操作只需要四处转一圈就可以了
         for i in range(60): # 左旋寻找目标，是离散的
             frame = self.screenshot()
-            pf = self.detector.yolov11s_forward(rgb_image=frame)
+            track_result = self.detector.yolov11s_botsort_track(rgb_image=frame)
             
-            if len(pf['cls'].values) > 0:
+            if len(track_result['cls']) > 1: # 因为我们只检测一个类型甚至不用看 cls
+                '''
+                这里我们会检测到多个目标，有以下两种方案
+                1.直接选择较远的目标进行对齐，因为我们假设整个遇境只有两个人
+                2.使用 BoT-SORTS 进行目标跟踪，锁定后出现的目标（当前使用的方案）
+                '''
                 print("检测到人物出现，已方向确定")
                 
-                # 模糊计算偏移量
-                x, w = pf['x'].values[0], pf['w'].values[0]
-                distance_x = x + w / 2 - self.width / 2  # 计算中心点偏移量
+                # 算一下是否有多个 id 以及是否离中心很近（离得近的是我们自己）
+                closest_id, closest_xy, closest_distance = -1, None, float('inf')
+                for i in range(len(track_result['xywh'])):
+                    if track_result['cls'][i] == 0:
+                        x, y = track_result['xywh'][0], track_result['xywh'][1] # YOLOv11 直出的坐标不用计算偏移
+                        distance = np.sqrt((x - self.width//2)**2 + (y - self.height//2)**2)
+                        if distance < closest_distance:
+                            closest_distance = distance
+                            closest_xy = (x, y)
+                            closest_id = i
+                # 我想导出成 CPU 模型的但是最后也没导出成功
+                distance_x = closest_xy[0] - self.width // 2  # 计算 x 轴偏移量, 这里最好是校验一下是不是 GPU 上
                 
                 '''
-                如何估算这个时间，我们假设 1s 能转 60 度相机
-                使用 y = k * ln(x) 当做我们的拟合函数, 已知x是距离, y是消耗的时间
-                需要估计的参数仅为 k, 用 ln 函数来拟合这个关系是因为 ln(x+1)~x
-                那么我们按照 1/3 屏幕作为 60 度夹角对应的坐标变换量（全是约算没有任何依据）
-                已知转速是已知的，也就是 1s 内转 60 度也就是 640 px
-                带入方程得到 1s 内变化 1 = k * ln(640 + 1)
-                那么我们可以得到 k = 1 / ln(640 + 100) = 0.1514 （本数据未基于统计验证）
-                这一下大概率是会转超了的，然后根据速率做一下归一化 k /= 3
+                摄像机旋转角度方程为 y = 1.6592x + b
+                也就是说转一圈需要 1.6592s, 这个是有数据的
+                数据为 [12.29,13.88,15.46,17.16,18.78,20.74,22.14,23.84,25.56,27.09]
+                最小二乘法计算出来参数为 y = 1.6592x + 10.5687
+                近似一个相机的视角是 120 度，那么我们可以试着每次按下 40 度
+                也就是每次按下 0.1884s，相当于每次转 40 度，检测分度值为 5 度
+                1920px 像素相当于 120 度，那么我们简单的计算一下 r * sin θ = px * k
+                其中，r 是物体在光遇内的距离， k 是像素到角度的转换系数
+                那么 θ = arcsin(px * k / r)，而 k / r = sin(θ) / px = sin(π/3) / 960
+                也就是 t = 1.6592/2π * (arcsin(px * sin(π/3) / 960))
                 '''
-                spin_time = math.log(abs(distance_x) + 100) * 0.0506  # 根据偏移量计算旋转时间
+                spin_time = 1.6592 / (2 * math.pi) * math.asin(distance_x * math.sin(math.pi / 3) / 960)  # 计算旋转时间
                 
                 print(f"计算出的旋转时间: {spin_time:.2f} 秒")
                 if distance_x > 0:  # 如果偏移量大于 0，说明需要向右转
@@ -367,9 +432,9 @@ class CrawlerProgramThread(BaseThread):
                     self.gauss_sleep(2) # 也别太快了
                 break
             
-            pydirectinput.keyDown('space')
-            self.gauss_sleep(0.4) # 随机慢速旋转
-            pydirectinput.keyUp('space')
+            pydirectinput.keyDown('left')
+            self.gauss_sleep(0.1884) # 随机慢速旋转
+            pydirectinput.keyUp('left')
             
         # 使用 SIFT 检测是否存在 
         timeout = 3
@@ -381,8 +446,14 @@ class CrawlerProgramThread(BaseThread):
             if len(sift_matches) > 0:
                 print("检测到送心员行为，开始接收爱心")
                 
-                self.press_key('f', wait_time=5)
-                self.press_key('f', wait_time=5)
+                # 拍手
+                self.press_key('f', wait_time=0.3)
+                self.press_key('down', wait_time=0.1)
+                self.press_key('right', wait_time=5)
+                # 送心
+                self.press_key('f', wait_time=0.3)
+                self.press_key('down', wait_time=0.1)
+                self.press_key('right', wait_time=5)
                 
                 pydirectinput.keyDown('down') # 定位回星盘去
                 self.gauss_sleep(2)
@@ -413,22 +484,22 @@ class CrawlerProgramThread(BaseThread):
             print(f"第 {epoch + 1} 轮取心")
             for index, row in pf.iterrows():
                 target_url = row['url']
-                crawler.crawl_main(target_url, headless=False, valid=True) # 记得一定要关闭验证模式
+                crawler.crawl_main(target_url, headless=False, valid=False) # 记得一定要关闭验证模式
                 
                 if crawler.code is not None:
                     print(f"识别到好友码: {crawler.code}")
                     
-                    # crawler.code = '3ZCK-F2F8-5121'
-                    
-                    friend_name = "AAA送心员{}".format(data['index'])
+                    friend_name = "送心员{}".format(''.join([self.detector.chinese_map[int(ch)] for ch in str(data['index'])]))
                     print(pd.DataFrame([[friend_name, crawler.code]], columns=['name', 'code']))
                     data['index'] += 1
+                    
+                    # friend_name = "小夜-固玩-不许乐"
                     
                     with open(self.yaml_path, 'w+', encoding='utf-8') as file:
                         yaml.dump(data, file, allow_unicode=True, sort_keys=True)
                         file.close()
                         
-                    # self.add_friend(friend_code=crawler.code, friend_name=friend_name)
+                    self.add_friend(friend_code=crawler.code, friend_name=friend_name)
                     print(f"添加好友 {friend_name} 成功")
                         
                     self.search_friend_name(find_target=friend_name)
@@ -566,10 +637,20 @@ class HeartProgramThread(BaseThread):
                 pydirectinput.click()  # 点击目标， 这次一定进入大屏星盘页
                 self.gauss_sleep(2)
             
-            for _ in range(6):
-                self.press_key('up', wait_time=0.3)  # 向上移动 6 次
+            for _ in range(5):
+                pydirectinput.keyDown('up')
+                time.sleep(0.12)
+                pydirectinput.keyUp('up')
+                self.gauss_sleep(0.1)  # 向上移动 8 次
+                
+            self.gauss_sleep(0.4)
+                
             for _ in range(2):
-                self.press_key('down', wait_time=0.2)  # 向下移动 2 次
+                pydirectinput.keyDown('down')
+                time.sleep(0.12)
+                pydirectinput.keyUp('down')
+                self.gauss_sleep(0.1) 
+                
             self.gauss_sleep(0.4)  # 等待响应
                 
             # 如果这里意外颠倒了其他按钮, 尤其是删除或拉黑好友, 我们要做出应急响应
@@ -650,6 +731,7 @@ class HeartProgramThread(BaseThread):
         赠送心火主线程，用来从行为上控制程序
         '''
         # 首先对准星盘使用, 按下 g 进入星盘页
+        self.search_star_board()
         self.press_key('g', wait_time=4)
         
         self.page = 0
