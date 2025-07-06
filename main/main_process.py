@@ -360,6 +360,7 @@ class CrawlerProgramThread(BaseThread):
         # 如果这里意外颠倒了其他按钮, 尤其是删除或拉黑好友, 我们要做出应急响应
         self.press_key('space', wait_time=2)
         
+        code = -1
         # 校验是否存在"屏蔽按钮"（实际上校验红色区域即可），校验方法为十分严格的 RGB 检测
         if not self.check_danger():
             # 进入之后只要你不乱动就是没问题的
@@ -426,6 +427,7 @@ class CrawlerProgramThread(BaseThread):
                 其中，r 是物体在光遇内的距离， k 是像素到角度的转换系数
                 那么 θ = arcsin(px * k / r)，而 k / r = sin(θ) / px = sin(π/3) / 960
                 也就是 t = 1.6592/2π * (arcsin(px * sin(π/3) / 960))
+                最后乘一个系数，相机有一个加速的过程，很奇怪，所以这样对齐一下
                 '''
                 spin_time = 1.5 * 1.6592 / (2 * math.pi) * math.asin(abs(distance_x) * math.sin(5 * math.pi / 12) / 960)  # 计算旋转时间
                 
@@ -457,16 +459,45 @@ class CrawlerProgramThread(BaseThread):
             if len(sift_matches) > 0:
                 print("检测到送心员行为，开始接收爱心")
                 
-                # 拍手
-                self.press_key('f', wait_time=0.3)
-                self.press_key('down', wait_time=0.1)
-                self.press_key('right', wait_time=0.1)
-                self.press_key('space', wait_time=7)
-                # 送心
-                self.press_key('f', wait_time=0.3)
-                self.press_key('down', wait_time=0.1)
-                self.press_key('right', wait_time=0.1)
-                self.press_key('space', wait_time=2)
+                if code == 0:
+                    # 拍手
+                    self.press_key('f', wait_time=0.3)
+                    self.press_key('down', wait_time=0.1)
+                    self.press_key('right', wait_time=0.1)
+                    self.press_key('space', wait_time=7)
+                    # 送心
+                    self.press_key('f', wait_time=0.3)
+                    self.press_key('down', wait_time=0.1)
+                    self.press_key('right', wait_time=0.1)
+                    self.press_key('space', wait_time=2)
+                    
+                elif code == 1:
+                    # 送他一个击掌
+                    self.press_key('f', wait_time=0.3)
+                    
+                    for _ in range(8):
+                        pydirectinput.keyDown('down')
+                        time.sleep(0.12)
+                        pydirectinput.keyUp('down')
+                        self.gauss_sleep(0.1)  # 向下移动 8 次
+                        
+                    for _ in range(2):
+                        pydirectinput.keyDown('up')
+                        time.sleep(0.12)
+                        pydirectinput.keyUp('up')
+                        self.gauss_sleep(0.1)  # 向下移动 8 次
+                        
+                    self.press_key('space', wait_time=1) # 送他一个击掌
+                    
+                    self.press_key('down', wait_time=0.1)
+                    self.press_key('right', wait_time=0.1)
+                    self.press_key('space', wait_time=9)
+                    
+                    # 送心
+                    self.press_key('f', wait_time=0.3)
+                    self.press_key('down', wait_time=0.1)
+                    self.press_key('right', wait_time=0.1)
+                    self.press_key('space', wait_time=2)
                 
                 pydirectinput.keyDown('down') # 定位回星盘去
                 self.gauss_sleep(2)
@@ -497,7 +528,10 @@ class CrawlerProgramThread(BaseThread):
             print(f"第 {epoch + 1} 轮取心")
             for index, row in pf.iterrows():
                 target_url = row['url']
-                crawler.crawl_main(target_url, headless=False, valid=False) # 记得一定要关闭验证模式
+                flag = crawler.crawl_main(target_url, headless=False, valid=False) # 记得一定要关闭验证模式
+                if not flag:
+                    print(f"第 {epoch + 1} 轮取心失败，说明出现了问题")
+                    break 
                 
                 if crawler.code is not None:
                     print(f"识别到好友码: {crawler.code}")

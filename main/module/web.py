@@ -58,14 +58,17 @@ class WebCrawler:
 
     def crawl_main(self, url="https://www.baidu.com/", headless=True, valid=False):
         """单次请求爬虫主函数, 不要太频繁地请求网页就可以"""
+        self.code = None  # 重置 code
+        
         if valid:
             print("您当前正咱运行在 VALID 验证环境中...请勿正式上线此版本...")
             
             code = 'APS5-S0EQ-DH2B' # 举例 APS5-S0EQ-DH2B
             if re.search(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$', code):
                 self.code = code
-            return
-            
+            return True
+           
+        exp_flag = True 
         try:
             # 智能生成 User-Agent（基于真实统计数据）
             ua = UserAgent()
@@ -170,10 +173,13 @@ class WebCrawler:
             
         except Exception as e:
             print(f"(WEB_CRAWLER) 捕捉到 Exception: {e}")
+            exp_flag = False
         finally:
             if self.browser_started:
                 helium.kill_browser()
                 self.browser_started = False
+                
+            return exp_flag
 
 if __name__ == "__main__":
     def opt_parser():
