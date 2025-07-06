@@ -100,6 +100,8 @@ texts:
 - "挚友" # 在这里修改你的挚友就可以了，记得要全部覆盖哦
 - "举例1" # 就像这样在后面加就可以了
 - "举例2"
+yolo: # YOLO 相关设置
+  model: E:\pandownload1\ML\sky-auto-collect\yolov11\weights\sky.pt # YOLO 模型位置，这个也要改
 ```
 
 之后正常运行就可以了，可以在后面确定参数 --yaml config.yaml 指定需要读取的 yaml 文件

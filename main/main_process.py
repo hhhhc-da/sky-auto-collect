@@ -167,9 +167,14 @@ class CrawlerProgramThread(BaseThread):
         '''
         self.press_key(key='esc', wait_time=3)
         
+        pydirectinput.keyDown('up')
+        time.sleep(0.1)
+        pydirectinput.keyUp('up')
+        self.gauss_sleep(0.1)
+        
         for _ in range(8):
             pydirectinput.keyDown('left')
-            self.gauss_sleep(0.1)
+            time.sleep(0.1)
             pydirectinput.keyUp('left')
             self.gauss_sleep(0.1)  # 向左移到最左边选框
             
@@ -177,7 +182,7 @@ class CrawlerProgramThread(BaseThread):
         
         for _ in range(3):
             pydirectinput.keyDown('right')
-            self.gauss_sleep(0.1)
+            time.sleep(0.1)
             pydirectinput.keyUp('right')
             self.gauss_sleep(0.1)
             
