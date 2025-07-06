@@ -242,8 +242,7 @@ class CrawlerProgramThread(BaseThread):
                 print("检测到添加好友页，退出程序")
                 break
             
-            if True:
-            # try:
+            try:
                 # 开始解析需要传送的好友信息
                 pf = self.detector.text_detector()
                 
@@ -313,9 +312,9 @@ class CrawlerProgramThread(BaseThread):
                         self.goto_meet(star_pos=closest_star_pos)
                         return 
                 
-            # except Exception as e:
-            #     print(f"捕捉到 Exception: {e}")
-            #     break
+            except Exception as e:
+                print(f"捕捉到 Exception: {e}")
+                break
              
     
     def goto_meet(self, star_pos=None) -> None:
