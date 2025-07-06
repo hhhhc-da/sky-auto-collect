@@ -129,15 +129,14 @@ class CrawlerProgramThread(BaseThread):
             mean_brightness = np.mean(gray_frame)
             
             if mean_brightness < 10 or mean_brightness > 245:
-                return True
+                return True, 0
             
         screenshot = pyautogui.screenshot()
         frame = np.array(screenshot)
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
         # 两秒的时候截取最下面是否存在 "您的朋友就在您身边"
-        boarder_height = gray_frame.shape[0] * 0.1 # 最下面 10% 的区域
-        text_area = gray_frame[-boarder_height:, :]
+        boarder_height = int(frame.shape[0] * 0.1) # 最下面 10% 的区域
+        text_area = frame[-boarder_height:, :, :]
         
         # 检测是否存在 "您的朋友就在您身边" 的提示
         paddle_ocr_result = self.detector.paddle_ocr.predict([text_area])
@@ -147,7 +146,7 @@ class CrawlerProgramThread(BaseThread):
         
         if '朋友' in text or '身边' in text:
             print("检测到已传送成功，您的朋友就在您身边")
-            return True
+            return True, 1
             
         while time.time() - s < 10:  # 最多等待十秒钟
             screenshot = pyautogui.screenshot()
@@ -158,9 +157,9 @@ class CrawlerProgramThread(BaseThread):
             mean_brightness = np.mean(gray_frame)
             
             if mean_brightness < 10 or mean_brightness > 245:
-                return True
+                return True, 0
             
-        return False  # 超过时间限制仍未检测到有效传送，返回 False
+        return False, -1  # 超过时间限制仍未检测到有效传送，返回 False
     
     def add_friend(self, friend_code='', friend_name='') -> None:
         '''
@@ -243,7 +242,8 @@ class CrawlerProgramThread(BaseThread):
                 print("检测到添加好友页，退出程序")
                 break
             
-            try:
+            if True:
+            # try:
                 # 开始解析需要传送的好友信息
                 pf = self.detector.text_detector()
                 
@@ -262,7 +262,7 @@ class CrawlerProgramThread(BaseThread):
                 
                 # 对文本信息按照相似度进行排序
                 sorted(text_info, key=lambda x: x[2], reverse=True)
-                print(f"找到相似的名称如下:\n{pf}")
+                print(f"找到相似的名称如下:\n{text_info}")
                         
                 dc, img = None, None
                 timeout_detector = 3  # 每次检测最多尝试 3 次
@@ -313,9 +313,9 @@ class CrawlerProgramThread(BaseThread):
                         self.goto_meet(star_pos=closest_star_pos)
                         return 
                 
-            except Exception as e:
-                print(f"捕捉到 Exception: {e}")
-                break
+            # except Exception as e:
+            #     print(f"捕捉到 Exception: {e}")
+            #     break
              
     
     def goto_meet(self, star_pos=None) -> None:
@@ -367,8 +367,18 @@ class CrawlerProgramThread(BaseThread):
             self.press_key('space', wait_time=0.1) # 进入房间
             
             s = time.time()
-            while not self.check_transfer() and time.time() - s < 600: # 阻塞校验是否进入, 最多循环检测十分钟
-                self.press_key('space', wait_time=0.1)
+            while True: # 阻塞校验是否进入, 最多循环检测十分钟
+                transfer_success, code = self.check_transfer()
+                if transfer_success:
+                    if code == 1:
+                        self.press_key('esc', wait_time=1)
+                        self.press_key('esc', wait_time=3)
+                        break
+                    elif code == 0:
+                        break
+                
+                if not transfer_success and time.time() - s < 600:
+                    self.press_key('space', wait_time=0.1)
                 
             if time.time() - s >= 600:
                 raise RuntimeError("传送异常，可能是传送失败或未进入房间，请检查程序运行状态")
@@ -392,17 +402,19 @@ class CrawlerProgramThread(BaseThread):
                 print("检测到人物出现，已方向确定")
                 
                 # 算一下是否有多个 id 以及是否离中心很近（离得近的是我们自己）
-                closest_id, closest_xy, closest_distance = -1, None, float('inf')
+                closest_id, closest_xy, closest_distance = -1, None, -float('inf')
                 for i in range(len(track_result['xywh'])):
                     if track_result['cls'][i] == 0:
-                        x, y = track_result['xywh'][0], track_result['xywh'][1] # YOLOv11 直出的坐标不用计算偏移
+                        x, y = track_result['xywh'].numpy()[i][0], track_result['xywh'].numpy()[i][1] # YOLOv11 直出的坐标不用计算偏移
                         distance = np.sqrt((x - self.width//2)**2 + (y - self.height//2)**2)
-                        if distance < closest_distance:
+                        
+                        if distance > closest_distance:
                             closest_distance = distance
                             closest_xy = (x, y)
                             closest_id = i
                 # 我想导出成 CPU 模型的但是最后也没导出成功
                 distance_x = closest_xy[0] - self.width // 2  # 计算 x 轴偏移量, 这里最好是校验一下是不是 GPU 上
+                print('distance_x:', distance_x)
                 
                 '''
                 摄像机旋转角度方程为 y = 1.6592x + b
@@ -416,7 +428,7 @@ class CrawlerProgramThread(BaseThread):
                 那么 θ = arcsin(px * k / r)，而 k / r = sin(θ) / px = sin(π/3) / 960
                 也就是 t = 1.6592/2π * (arcsin(px * sin(π/3) / 960))
                 '''
-                spin_time = 1.6592 / (2 * math.pi) * math.asin(distance_x * math.sin(math.pi / 3) / 960)  # 计算旋转时间
+                spin_time = 1.5 * 1.6592 / (2 * math.pi) * math.asin(abs(distance_x) * math.sin(5 * math.pi / 12) / 960)  # 计算旋转时间
                 
                 print(f"计算出的旋转时间: {spin_time:.2f} 秒")
                 if distance_x > 0:  # 如果偏移量大于 0，说明需要向右转
@@ -449,11 +461,13 @@ class CrawlerProgramThread(BaseThread):
                 # 拍手
                 self.press_key('f', wait_time=0.3)
                 self.press_key('down', wait_time=0.1)
-                self.press_key('right', wait_time=5)
+                self.press_key('right', wait_time=0.1)
+                self.press_key('space', wait_time=7)
                 # 送心
                 self.press_key('f', wait_time=0.3)
                 self.press_key('down', wait_time=0.1)
-                self.press_key('right', wait_time=5)
+                self.press_key('right', wait_time=0.1)
+                self.press_key('space', wait_time=2)
                 
                 pydirectinput.keyDown('down') # 定位回星盘去
                 self.gauss_sleep(2)
@@ -492,8 +506,6 @@ class CrawlerProgramThread(BaseThread):
                     friend_name = "送心员{}".format(''.join([self.detector.chinese_map[int(ch)] for ch in str(data['index'])]))
                     print(pd.DataFrame([[friend_name, crawler.code]], columns=['name', 'code']))
                     data['index'] += 1
-                    
-                    # friend_name = "小夜-固玩-不许乐"
                     
                     with open(self.yaml_path, 'w+', encoding='utf-8') as file:
                         yaml.dump(data, file, allow_unicode=True, sort_keys=True)
@@ -556,7 +568,7 @@ class HeartProgramThread(BaseThread):
                     print("捕捉到 Exception:", e)
                     timeout_detector -= 1
                    
-            if pdata['code'] != 1:
+            if pdata is not None and pdata['code'] != 1:
                 timeout -= 1
                 
                 # 不停向左检测图片

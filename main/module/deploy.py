@@ -580,8 +580,8 @@ class NanokaDetector():
         for _ in range(3):
             circle_image = cv2.medianBlur(image_content, 7) 
             _, image_content = cv2.threshold(circle_image, 50, 255, cv2.THRESH_BINARY)
-        # 像素扩展
-        for _ in range(6):
+        # 像素扩展 (扩展约 50 像素)
+        for _ in range(8):
             circle_image = cv2.blur(image_content, (7,7)) 
             _, image_content = cv2.threshold(circle_image, 0, 255, cv2.THRESH_BINARY)
 
@@ -693,7 +693,7 @@ class NanokaDetector():
 
         sift = cv2.SIFT_create(
             nfeatures=0,               # 默认0无限制，可能导致计算慢
-            contrastThreshold=0.04,    # 降低对比度阈值，提取更多弱特征（默认0.04）
+            contrastThreshold=0.03,    # 降低对比度阈值，提取更多弱特征（默认0.04）
             edgeThreshold=10,          # 降低边缘阈值，允许靠近边缘的特征点（默认10）
             sigma=1.6                  # 高斯模糊系数，控制尺度空间初始层（默认1.6）
         )
@@ -719,7 +719,7 @@ class NanokaDetector():
             
             good_matches = []
             for m, n in matches:
-                if m.distance < 0.7 * n.distance:
+                if m.distance < 0.8 * n.distance:
                     good_matches.append(m)
             
             # 几何验证（单应性矩阵 + RANSAC）
@@ -735,7 +735,8 @@ class NanokaDetector():
                     target_corners = cv2.perspectiveTransform(template_corners, M)
                     sift_points.append([np.average(target_corners, axis=0)[0].astype(np.uint32).tolist(), step])
                 else:
-                    print("警告：无法计算单应性矩阵，可能是匹配点质量不佳")
+                    sift_points.append([[0, 0], 0])
+                    print("警告：无法计算单应性矩阵，可能是匹配点质量不佳，质量不好我也要，哼")
             else:
                 print("警告：匹配点不足，未检测到模板内容")
                 
