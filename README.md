@@ -54,7 +54,7 @@ conda activate data && python ui.py
 
 软件当前的 UI 是这样的，背景图用的是粒子旋转效果和连线，点击可以扩散和回弹
 
-![image](./images/ui.png)
+![image](./images/ui.gif)
 
 
 每次使用一个功能时，菜单会收起来，如果你想中断那只能打开任务管理器搜索 python 之后强制中断
