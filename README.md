@@ -4,14 +4,14 @@
 
 使用时，请让光崽对准星盘，这样就可以点击按钮开始自动收集心火、获取爱心等行为
 
-理论上屏幕是 16:9 的玩家都可以使用，假如你是 4:3 或者其他的...还没适配
+理论上屏幕是 16:9 的玩家都可以使用，假如你是 4:3 或者其他的...还没适配，目前支持 1920x1080
 
 思路是对屏幕进行裁剪，使用 16:9 的框进行裁剪，或者根据你的屏幕分辨率进行卷积核放缩...
 
 ### __软件安装__
 
 ```
-conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.1 -c pytorch -c nvidia
+conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.1 -c pytorch -c nvidias
 ```
 
 如果不用 Anaconda 的用户考虑使用下面的命令，同时 PyTorch 已经不需要再手动安装 CUDA 和 cuDNN 了
@@ -52,7 +52,7 @@ conda activate data && python ui.py
 
 ### __功能详情__
 
-软件当前的 UI 是这样的，UI 仍然在开发中...
+软件当前的 UI 是这样的，背景图用的是例子旋转效果和连线，点击可以扩散和回弹
 
 ![image](./images/ui.png)
 
@@ -69,6 +69,7 @@ conda activate data && python ui.py
 |获取图像模态数据|data|
 |光遇行为测试|sky-api|
 |YOLOv11目标检测|yolov11|
+|MoE模型导航|navigator|
 |主程序|main|
 
 功能仍在开发中，请耐心等待
@@ -142,7 +143,7 @@ Results saved to sky_detection\yolo11n_sky
 
 理论上能用但是现在受到光遇的重大打击，不建议 CPU 不太好的宝宝用...
 
-在不卡顿的情况下测试通过，还没有进行更多测试
+在不卡顿的情况下测试通过，还没有进行更多测试（而且我也没用出 SIFT 算法的全部实力，目前不太好使建议盯着）
 
 ### __自动游走跑图__
 
@@ -152,4 +153,6 @@ Results saved to sky_detection\yolo11n_sky
 
 RTX 3050 LapTop 所以不支持 flash_attn 所以运行速度较慢, 使用 CUDA 加速
 
-之后打算使用深度强化学习进行学习, 所以我只能说路漫漫...
+打算使用对红色区域检测的方式增强这一片的对比度和掩膜，使用 MoE 模型省心省力
+
+不过怎么配置奖励函数又是个问题，就用左上角蜡烛的状态变化吧
