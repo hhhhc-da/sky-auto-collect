@@ -70,7 +70,14 @@ conda activate data && python ui.py
 |光遇行为测试|sky-api|
 |YOLOv11目标检测|yolov11|
 |MoE模型导航|navigator|
+|额外插件开发|external|
 |主程序|main|
+
+在 external 里面有 __Nonebot2 + OneBot V11 的机器人后端__，可以使用 Nonebot2 项目直接打开对接到 NapCatQQ
+
+这个机器人可以在群里取心但是目前只完成了单个链接的稳定读取
+
+（多链接可能重复送心员，还没有来得及处理，我的小号就寄了）
 
 功能仍在开发中，请耐心等待
 

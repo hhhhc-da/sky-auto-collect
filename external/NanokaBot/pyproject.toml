@@ -1,0 +1,15 @@
+[project]
+name = "NanokaBot"
+version = "0.1.0"
+description = "NanokaBot"
+readme = "README.md"
+requires-python = ">=3.9, <4.0"
+
+[tool.nonebot]
+adapters = [
+    { name = "Mail", module_name = "nonebot.adapters.mail" },
+    {name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11"}
+]
+plugins = ["nonebot_plugin_apscheduler"]
+plugin_dirs = ["nanokabot/plugins"]
+builtin_plugins = ["echo"]
