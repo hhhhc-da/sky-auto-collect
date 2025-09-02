@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 '''
-感谢 豆包 的倾力协助, 让我瞅瞅是怎么个事
 我第一次做混合专家模型出现了一大堆的问题...
 尤其是配置分布式环境的时候，可是我特么只有单卡
 我从来没配过多卡环境，而且最终落实到用户都不一定能用 GPU
@@ -29,20 +28,24 @@ class MapEncoder(nn.Module):
         x = F.relu(self.conv3(x))
         x = F.relu(self.conv4(x))
         x = self.pool(x).flatten(1)
-        return self.fc(x)
+        x = self.fc(x)
+        x = torch.cat([x, torch.randn([x.size(0), 1], device=self.fc.weight.device)], dim=1)
+        return x
 
 class StateEncoder(nn.Module):
     '''
     状态编码器: 处理运动方向和速度
     '''
-    def __init__(self, input_dim=2, hidden_dim=64):
+    def __init__(self, input_dim=11, hidden_dim=64):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, 32)
         self.fc2 = nn.Linear(32, hidden_dim)
         
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        return self.fc2(x)
+        x = self.fc2(x)
+        x = torch.cat([x, torch.randn([x.size(0), 1], device=self.fc1.weight.device)], dim=1)
+        return x
 
 class ImageEncoder(nn.Module):
     '''
@@ -77,7 +80,9 @@ class ImageEncoder(nn.Module):
         x = F.relu(x + self.res_block2(x))  # 残差连接
         x = F.relu(self.conv4(x))
         x = self.pool(x).flatten(1)
-        return self.fc(x)
+        x = self.fc(x)
+        x = torch.cat([x, torch.randn([x.size(0), 1], device=self.fc.weight.device)], dim=1)
+        return x
 
 class Expert(nn.Module):
     '''
@@ -166,7 +171,7 @@ class MoENavigationModel(nn.Module):
     '''
     def __init__(self, 
                  map_channels=3, 
-                 state_dim=2, 
+                 state_dim=11, 
                  image_channels=3,
                  num_experts=8, 
                  top_k=2, 
@@ -179,7 +184,7 @@ class MoENavigationModel(nn.Module):
         self.image_encoder = ImageEncoder(input_channels=image_channels)
         
         # 特征融合维度
-        self.feature_dim = 256 + 64 + 256  # 地图 + 状态 + 图像
+        self.feature_dim = 256 + 64 + 256 + 3  # 地图 + 状态 + 图像
         
         # 本地MoE层（无分布式依赖）
         self.moe = LocalMoE(
@@ -193,7 +198,7 @@ class MoENavigationModel(nn.Module):
         self.output_layer = nn.Sequential(
             nn.Linear(256, 128),  # 256是Expert的输出维度
             nn.ReLU(),
-            nn.Linear(128, 5),  # 输出5个动作
+            nn.Linear(128, 11),  # 输出11个动作
             nn.Sigmoid()  # 将输出归一化到[0,1]区间
         )
         
@@ -219,18 +224,20 @@ if __name__ == "__main__":
     # 创建模型并移至GPU（如果可用）
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = MoENavigationModel(
-        map_channels=3,    # 地图通道数（走过/未走过/不能走）
-        state_dim=2,       # 运动状态维度（方向、速度）
-        image_channels=3,  # RGB图像
+        map_channels=3,    # HSV 通道图（检测蜡烛的红色）
+        state_dim=11,      # 运动状态维度（上一时刻 Keyboard）
+        image_channels=3,  # RGB 图像
         num_experts=8,     # 专家数量
-        top_k=2,           # Top-K门控
+        top_k=2,           # Top-K 门控
         balance_loss_weight=0.1  # 负载均衡损失权重
     ).to(device)
     
     # 模拟输入
-    map_input = torch.randn(1, 3, 801, 801).to(device)
-    state_input = torch.randn(1, 2).to(device)
-    image_input = torch.randn(1, 3, 224, 224).to(device)
+    map_input = torch.randn(1, 3, 1920, 1024).to(device)
+    state_input = torch.randn(1, 11).to(device)
+    image_input = torch.randn(1, 3, 1920, 1024).to(device)
+
+    print("输入形状:", map_input.shape, state_input.shape, image_input.shape)
     
     # 前向传播
     model.eval()
